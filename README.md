@@ -1,2 +1,2 @@
-# unclemag.github.io
+# unclemag.com
 Source code for unclemag.com
