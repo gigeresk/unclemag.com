@@ -4,16 +4,17 @@
       <meta
          charset="utf-8">
       <meta
-         name="viewport" content="width=device-width, initial-scale=1">
+         name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
       <meta property="og:title" content="Uncle Magazine">
       <meta property="og:description" content="By Uncles, For Uncles">
       <meta property="og:image" content="img/site-image.jpg">
       <meta name="twitter:card" content="summary_large_image">
-      <meta name="theme-color" content="#000">
       <title>Uncle Magazine</title>
       <link rel="icon" type="image/x-icon" href="images/favicon-groucho.png">
-      <style type="text/css">html{min-height:100%;padding:0 12px;
-         background:#000 url("images/magic-eye-bg.webp") center/600px auto repeat fixed}
+      <style type="text/css">html{min-height:100%;padding:0 max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));
+         background:#7f7765}
+         html::before{content:"";position:fixed;top:0;left:0;right:0;height:100vh;z-index:-1;
+         background:url("images/magic-eye-bg.webp") center top/600px auto repeat}
          body{margin:40px auto;max-width:650px;line-height:1.6;font-size:18px;color:#444;
          padding:20px 30px;color:#fff;font-weight:bold;
          text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,
