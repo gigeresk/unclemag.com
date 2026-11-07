@@ -17,22 +17,54 @@
          .bar{display:flex;align-items:center;justify-content:space-between;gap:12px;
          padding:10px 16px;flex:0 0 auto}
          #stage{flex:1 1 0;display:flex;align-items:center;justify-content:center;
-         min-height:0;padding:0 16px 16px}
+         min-height:0;padding:0 64px 16px 16px}
+         @media (max-width:600px){#stage{padding-right:52px}}
          #frame{margin:0 auto;visibility:hidden}
          .page{background:#fff}
          .page img{width:100%;height:100%;display:block;object-fit:contain}
          .page.filler{background:#000}
          .filler .bg{width:100%;height:100%;background:url("images/magic-eye-bg.webp") 0 0/600px auto repeat}
          #status{position:absolute;left:0;right:0;top:50%;text-align:center}
+         /* Crayons */
+         .page .ink{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+         .page .ink:not([src]){display:none}
+         #draw,#pending{position:fixed;left:0;top:0;opacity:.85;pointer-events:none}
+         #draw{display:none;touch-action:none;z-index:20}
+         #pending{z-index:19}
+         #erasing{position:fixed;left:0;top:0;z-index:18;pointer-events:none}
+         body.writing #draw{display:block;pointer-events:auto}
+         #crayons{position:fixed;left:-999px;top:0;z-index:21;display:flex;flex-direction:column;
+         gap:10px;visibility:hidden}
+         .crayon{display:block;width:40px;height:96px;padding:0 9px;margin:0;border:0;background:none;
+         cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .28s cubic-bezier(.34,1.56,.64,1);
+         filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
+         .crayon svg{display:block;width:22px;height:96px}
+         .crayon img{display:block;height:96px;width:auto;margin:0 auto}
+         .crayon.tall{height:154px}.crayon.tall img{height:154px}
+         .crayon.on{transform:translate(-6px,-10px) rotate(-12deg)}
+         .crayon.held{visibility:hidden}   /* desktop: it's in your hand (the cursor) */
+         .flying{position:fixed;left:0;top:0;z-index:30;pointer-events:none;transform-origin:50% 50%;
+         filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
+         .flying svg,.flying img{display:block;width:100%;height:100%}
+         @media (max-width:600px){.crayon{width:34px;height:76px;padding:0 7px}.crayon svg{width:20px;height:76px}.crayon img{height:76px}.crayon.tall{height:122px}.crayon.tall img{height:122px}}
       </style>
    </head>
    <body>
       <div class="bar">
          <a href="./">&larr; Back</a>
-         <a id="dl" href="#" download>PDF</a>
+         <a id="dl" href="#" download hidden>PDF</a>
       </div>
       <div id="stage"><div id="frame"><div id="book"></div></div></div>
       <div id="status">Loading&hellip;</div>
+      <canvas id="erasing"></canvas>
+      <canvas id="pending"></canvas>
+      <canvas id="draw"></canvas>
+      <div id="crayons">
+         <button class="crayon" data-color="#D3212D" style="--c:#D3212D" aria-label="Red crayon" aria-pressed="false" data-cursor="images/crayon-red-cursor.png" data-hotspot="1 38" data-cursor-len="54"><img src="images/crayon-red.png" alt=""></button>
+         <button class="crayon" data-color="#2E3A8C" style="--c:#2E3A8C" aria-label="Blue crayon" aria-pressed="false" data-cursor="images/crayon-blue-cursor.png" data-hotspot="1 38" data-cursor-len="54"><img src="images/crayon-blue.png" alt=""></button>
+         <button class="crayon" data-color="#EDBE1F" style="--c:#EDBE1F" aria-label="Yellow crayon" aria-pressed="false" data-cursor="images/crayon-yellow-cursor.png" data-hotspot="1 38" data-cursor-len="54"><img src="images/crayon-yellow.png" alt=""></button>
+         <button class="crayon tall" data-color="#4a4a4a" style="--c:#4a4a4a" aria-label="Pencil (right-click erases)" aria-pressed="false" data-cursor="images/pencil-cursor.png" data-hotspot="1 38" data-cursor-len="56" data-eraser-cursor="images/pencil-eraser-cursor.png" data-eraser-hotspot="1 37"><img src="images/pencil.png" alt=""></button>
+      </div>
 
       <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
       <script>
@@ -56,7 +88,18 @@
             return;
          }
          document.title = info.title;
-         document.getElementById('dl').href = info.pdf;
+         // The PDF link only shows if the flipbook can't open.
+         function fallBack() {
+            var dl = document.getElementById('dl');
+            dl.href = info.pdf;
+            dl.hidden = false;
+            status.style.display = '';
+            status.innerHTML = 'Couldn\u2019t open the flipbook. <a></a>';
+            var a = status.querySelector('a');
+            a.href = info.pdf;
+            a.textContent = 'Read the PDF instead';
+         }
+         if (typeof St === 'undefined') return fallBack();
 
          var n = info.pages, ratio = info.width / info.height, MINW = 200;
 
@@ -76,7 +119,7 @@
             fillerBgs.push(bg);
          }
          addFiller();
-         var imgs = [];
+         var imgs = [], inkImgs = { crayon: [], pencil: [] };
          for (var i = 1; i <= n; i++) {
             var div = document.createElement('div');
             div.className = 'page';
@@ -84,6 +127,13 @@
             img.alt = '';
             img.decoding = 'async';
             div.appendChild(img);
+            ['crayon', 'pencil'].forEach(function (layer) {   // scribble layers, pencil on top
+               var ink = document.createElement('img');
+               ink.className = 'ink';
+               ink.alt = '';
+               div.appendChild(ink);
+               inkImgs[layer].push(ink);
+            });
             book.appendChild(div);
             imgs.push(img);
          }
@@ -91,12 +141,15 @@
 
          // Fetch the cover alone first so it isn't competing for bandwidth, then the rest in order.
          imgs[0].src = dir + '1.webp';
-         await imgs[0].decode().catch(function () {});
+         var coverOK = await imgs[0].decode().then(function () { return true; }, function () { return false; });
+         if (!coverOK) return fallBack();
          imgs.slice(1).forEach(function (img, k) { img.src = dir + (k + 2) + '.webp'; });
 
          // Size the book so a spread (or single page on narrow screens) fits the viewport.
          function fit() {
-            var aw = stage.clientWidth - 32, ah = stage.clientHeight - 16;
+            var cs = getComputedStyle(stage);   // padding leaves room for the crayons on the right
+            var aw = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+            var ah = stage.clientHeight - parseFloat(cs.paddingBottom);
             var w = Math.min(aw, ah * ratio * 2);
             if (w < MINW * 2) w = Math.min(aw, ah * ratio);
             frame.style.width = Math.max(MINW, Math.floor(w)) + 'px';
@@ -104,7 +157,9 @@
          window.addEventListener('resize', fit);
          fit();
 
-         var flip = new St.PageFlip(book, {
+         var flip;
+         try {
+         flip = new St.PageFlip(book, {
             width: info.width, height: info.height,
             size: 'stretch',
             minWidth: MINW, maxWidth: 2000,
@@ -115,6 +170,7 @@
             mobileScrollSupport: false
          });
          flip.loadFromHTML(book.querySelectorAll('.page'));
+         } catch (e) { return fallBack(); }
          status.style.display = 'none';
          frame.style.visibility = 'visible';
 
@@ -142,11 +198,474 @@
          flip.on('flip', skipFillers);
          flip.on('changeOrientation', skipFillers);
          document.addEventListener('keydown', function (e) {
+            if (document.body.classList.contains('writing')) return;   // no page turning with a crayon
             var i = flip.getCurrentPageIndex();
             if (e.key === 'ArrowLeft' && i > 1) flip.flipPrev();
             if (e.key === 'ArrowRight' && i < n) flip.flipNext();
          });
+
+         startCrayons(flip, n, ratio, slug, inkImgs);
       })();
+
+      // ---------------------------------------------------------------- crayons
+      // Pick a crayon (right of the magazine) to scribble on the pages; tap it again to go
+      // back to flipping. Scribbles live in an <img class="ink"> inside each page so they bend
+      // and flip with it, and are kept in this browser (IndexedDB).
+      function startCrayons(flip, n, ratio, slug, inkImgs) {
+         var body = document.body;
+         var draw = document.getElementById('draw'), dctx = draw.getContext('2d');
+         var pend = document.getElementById('pending'), pctx = pend.getContext('2d');
+         var ers = document.getElementById('erasing'), ectx = ers.getContext('2d');
+         var box = document.getElementById('crayons');
+         var buttons = [].slice.call(box.querySelectorAll('.crayon'));
+         var block = document.querySelector('#book .stf__block');
+         var INK_W = 1000, INK_H = Math.round(INK_W / ratio);
+         var inkCanvas = { crayon: {}, pencil: {} };   // layer -> page -> canvas, made only when needed
+         var color = null;        // active crayon colour, null = flipping
+         var flipState = 'read';
+         var dpr = 1, canvasRect = null;
+         flip.on('changeState', function (e) { flipState = e.data; if (e.data !== 'read') commit(); });
+
+         // Paper grain: a fixed speckle mask so the wax skips like real crayon on paper.
+         // The pencil gets the same idea with finer grain, so small letters stay readable.
+         var PENCIL = '#4a4a4a', GRAIN = 256;
+         function makeGrain(S, cut, holes) {
+            var small = document.createElement('canvas');
+            small.width = small.height = S;
+            var sc = small.getContext('2d'), sd = sc.createImageData(S, S);
+            for (var k = 0; k < sd.data.length; k += 4) {
+               var v = Math.random() * 255; sd.data[k] = sd.data[k + 1] = sd.data[k + 2] = v; sd.data[k + 3] = 255;
+            }
+            sc.putImageData(sd, 0, 0);
+            var c = document.createElement('canvas');
+            c.width = c.height = GRAIN;
+            var g = c.getContext('2d');
+            g.imageSmoothingEnabled = true;
+            g.drawImage(small, 0, 0, GRAIN, GRAIN);
+            var d = g.getImageData(0, 0, GRAIN, GRAIN);
+            for (var k = 0; k < d.data.length; k += 4) {
+               var keep = d.data[k] > cut && Math.random() > holes;   // clumps + fine pinholes
+               d.data[k] = d.data[k + 1] = d.data[k + 2] = 0;
+               d.data[k + 3] = keep ? 255 : 0;
+            }
+            g.putImageData(d, 0, 0);
+            return { pattern: dctx.createPattern(c, 'repeat'), url: c.toDataURL() };
+         }
+         var grains = { crayon: makeGrain(64, 70, 0.12), pencil: makeGrain(128, 45, 0.08) };
+         function grainFor(c) { return c === PENCIL ? grains.pencil : grains.crayon; }
+         // Live strokes show the same grain through a CSS mask (no per-frame masking work).
+         function setMask() {
+            var size = (GRAIN / dpr) + 'px', url = 'url(' + grainFor(color).url + ')';
+            ['maskImage', 'webkitMaskImage'].forEach(function (k) { draw.style[k] = url; });
+            ['maskSize', 'webkitMaskSize'].forEach(function (k) { draw.style[k] = size + ' ' + size; });
+            ['maskRepeat', 'webkitMaskRepeat'].forEach(function (k) { draw.style[k] = 'repeat'; });
+         }
+
+         // Page slots currently on screen, in canvas (= .stf__block) coordinates.
+         function slots() {
+            var r = flip.getBoundsRect(), i = flip.getCurrentPageIndex(), out = [];
+            var right = { x: r.left + r.pageWidth, y: r.top, w: r.pageWidth, h: r.height };
+            if (flip.getOrientation() === 'portrait') {
+               right.page = i; out.push(right);
+            } else {
+               var left = Math.floor(i / 2) * 2;
+               out.push({ x: r.left, y: r.top, w: r.pageWidth, h: r.height, page: left });
+               right.page = left + 1; out.push(right);
+            }
+            return out.filter(function (s) { return s.page >= 1 && s.page <= n; });
+         }
+
+         // Keep the canvases over the book and the crayons just right of it.
+         var lastLayout = '';
+         (function layout() {
+            var b = block.getBoundingClientRect(), r = flip.getBoundsRect();
+            var key = [b.left, b.top, b.width, b.height, r.left, r.pageWidth, r.height, window.devicePixelRatio].join();
+            if (key !== lastLayout && b.width > 0) {
+               if (lastLayout) commit();
+               lastLayout = key;
+               dpr = window.devicePixelRatio || 1;
+               canvasRect = b;
+               [draw, pend, ers].forEach(function (c) {
+                  c.style.left = b.left + 'px'; c.style.top = b.top + 'px';
+                  c.style.width = b.width + 'px'; c.style.height = b.height + 'px';
+                  c.width = Math.round(b.width * dpr); c.height = Math.round(b.height * dpr);
+               });
+               setMask();
+               var bw = box.offsetWidth, bh = box.offsetHeight;
+               box.style.left = Math.min(window.innerWidth - bw - 4, b.left + r.left + 2 * r.pageWidth + 6) + 'px';
+               box.style.top = Math.max(4, b.top + r.top + r.height / 2 - bh / 2) + 'px';
+               box.style.visibility = 'visible';
+            }
+            requestAnimationFrame(layout);
+         })();
+
+         // ---- picking crayons
+         function cursorFor(c) {
+            var own = buttonFor(c);
+            if (own && own.dataset.cursor) return 'url("' + own.dataset.cursor + '") ' + own.dataset.hotspot + ', crosshair';
+            if (c === PENCIL) return 'url("data:image/svg+xml,' + encodeURIComponent(
+               '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
+               '<g transform="rotate(45 16 16)"><path d="M13.5 26 L16 33 L18.5 26 Z" fill="#E9C89B" stroke="#000" stroke-width=".7"/>' +
+               '<path d="M15.2 30.5 L16 33 L16.8 30.5 Z" fill="#333"/>' +
+               '<rect x="13.5" y="1" width="5" height="25" fill="#F4C430" stroke="#000" stroke-width=".8"/></g></svg>') +
+               '") 4 28, crosshair';
+            var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
+               '<g transform="rotate(45 16 16)"><path d="M13 29 L16 33 L19 29 Z" fill="' + c + '" stroke="#000" stroke-width=".8"/>' +
+               '<rect x="12.5" y="2" width="7" height="27" rx="1.5" fill="' + c + '" stroke="#000" stroke-width="1"/>' +
+               '<rect x="12.5" y="6" width="7" height="2" fill="#111"/><rect x="12.5" y="24" width="7" height="2" fill="#111"/></g></svg>';
+            return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '") 4 28, crosshair';
+         }
+         // Desktop: the picked-up crayon leaves the box and becomes the cursor.
+         // Phone: it stays in the box, tilted, as an on/off toggle.
+         var desktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+         var lastX = -1, lastY = -1;
+         document.addEventListener('pointermove', function (e) { lastX = e.clientX; lastY = e.clientY; }, { passive: true });
+         buttons.forEach(function (b) { if (b.dataset.cursor) new Image().src = b.dataset.cursor; });
+         function buttonFor(c) { return buttons.filter(function (b) { return b.dataset.color === c; })[0]; }
+
+         // (x, y): where the previous crayon was let go, so it can zip back from there.
+         function setColor(c, x, y) {
+            var prev = color;
+            color = c;
+            body.classList.toggle('writing', !!c);
+            draw.style.cursor = c ? cursorFor(c) : '';
+            if (c) setMask();
+            if (c === PENCIL) readyPencil();
+            buttons.forEach(function (b) {
+               var on = b.dataset.color === c;
+               b.classList.toggle('on', on && !desktop);     // phone: tilts up, springs back via CSS
+               b.classList.toggle('held', on && desktop);
+               b.setAttribute('aria-pressed', on);
+            });
+            // Desktop: the crayon was the cursor, so it flies from there back into the box.
+            if (desktop && prev && prev !== c && x >= 0) zipBack(prev, x, y);
+         }
+
+         // Fly a crayon from the point where it was dropped back to its spot in the box.
+         function zipBack(c, x, y) {
+            var b = buttonFor(c), art = b.firstElementChild, home = art.getBoundingClientRect();
+            var w = home.width, h = home.height;
+            var s0 = (b.dataset.cursorLen ? +b.dataset.cursorLen : 31) / h;   // starts the size of the cursor
+            var fly = document.createElement('div');
+            fly.className = 'flying';
+            fly.style.cssText = 'width:' + w + 'px;height:' + h + 'px;--c:' + c;
+            fly.appendChild(art.cloneNode(true));
+            document.body.appendChild(fly);
+            b.style.visibility = 'hidden';
+            // start pointing down-left with the tip at (x, y), like the cursor
+            var k = 0.7071 * (h / 2) * s0;
+            var from = 'translate(' + (x + k - w / 2) + 'px,' + (y - k - h / 2) + 'px) rotate(-135deg) scale(' + s0 + ')';
+            var to = 'translate(' + home.left + 'px,' + home.top + 'px) rotate(0deg) scale(1)';
+            function land() { fly.remove(); b.style.visibility = ''; }
+            if (!fly.animate) return land();
+            var a = fly.animate([{ transform: from }, { transform: to }],
+                                { duration: 420, easing: 'cubic-bezier(.5,0,.2,1.15)' });
+            a.onfinish = a.oncancel = land;
+         }
+         // Toggle on press, not on click: phones can drop the click for a tap that comes right
+         // after a scribble, which left the crayon stuck "on". Keyboard clicks (detail 0) still work.
+         buttons.forEach(function (b) {
+            function toggle(x, y) { setColor(color === b.dataset.color ? null : b.dataset.color, x, y); }
+            b.addEventListener('pointerdown', function (e) {
+               if (e.pointerType === 'mouse' && e.button !== 0) return;
+               e.preventDefault();
+               toggle(e.clientX, e.clientY);
+            });
+            b.addEventListener('click', function (e) { if (e.detail === 0) toggle(-1, -1); });
+         });
+         document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && color) setColor(null, lastX, lastY); });
+
+         // While a crayon is out, page-flip gets no input at all: it listens for mouse/touch moves
+         // and releases on the whole window (corner peeks, drags), so swallow those first.
+         ['mousedown', 'mousemove', 'mouseup', 'touchstart', 'touchmove', 'touchend'].forEach(function (t) {
+            window.addEventListener(t, function (e) { if (color) e.stopPropagation(); }, true);
+         });
+
+         // Clicking/tapping anywhere that isn't a page drops the crayon (it zips back).
+         function onPage(x, y) {
+            if (!canvasRect) return false;
+            x -= canvasRect.left; y -= canvasRect.top;
+            return slots().some(function (s) { return x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h; });
+         }
+         document.addEventListener('pointerdown', function (e) {
+            if (!color || box.contains(e.target)) return;
+            if (e.target === draw && onPage(e.clientX, e.clientY)) return;
+            setColor(null, e.clientX, e.clientY);
+         }, true);
+
+         // ---- drawing
+         var stroke = null;   // {id, pts: queued points, last, prev, bbox}
+         var raf = 0;
+         function pos(e) { return { x: e.clientX - canvasRect.left, y: e.clientY - canvasRect.top }; }
+
+         draw.addEventListener('contextmenu', function (e) { if (color) e.preventDefault(); });
+         draw.addEventListener('pointerdown', function (e) {
+            if (color === PENCIL && e.pointerType === 'mouse' && e.button === 2) return startErase(e);
+            if (!color || stroke || erase || flipState !== 'read' || (e.pointerType === 'mouse' && e.button !== 0)) return;
+            var sl = slots();
+            if (!sl.length) return;
+            e.preventDefault();
+            draw.setPointerCapture(e.pointerId);
+            var p = pos(e);
+            var pencil = color === PENCIL;
+            var width = pencil ? Math.max(1.4, sl[0].w * 0.003) : Math.max(3, sl[0].w * 0.014);
+            stroke = { id: e.pointerId, layer: pencil ? 'pencil' : 'crayon', grain: grainFor(color), jitter: pencil ? 0.08 : 0.24, pts: [], last: p, prev: p, width: width, slots: sl,
+                       bbox: { x0: p.x, y0: p.y, x1: p.x, y1: p.y } };
+            dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            dctx.save();
+            dctx.beginPath();
+            sl.forEach(function (s) { dctx.rect(s.x, s.y, s.w, s.h); });
+            dctx.clip();
+            dctx.strokeStyle = dctx.fillStyle = color;
+            dctx.lineCap = dctx.lineJoin = 'round';
+            dctx.beginPath(); dctx.arc(p.x, p.y, width / 2, 0, Math.PI * 2); dctx.fill();
+         });
+         draw.addEventListener('pointermove', function (e) {
+            if (!stroke || e.pointerId !== stroke.id) return;
+            var evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+            if (!evs.length) evs = [e];
+            evs.forEach(function (ev) { stroke.pts.push(pos(ev)); });
+            if (!raf) raf = requestAnimationFrame(flush);
+         });
+         function flush() {
+            raf = 0;
+            if (!stroke) return;
+            var s = stroke;
+            s.pts.forEach(function (p) {
+               // smooth: curve through midpoints, slight wobble in pressure like a real crayon
+               var m0 = { x: (s.prev.x + s.last.x) / 2, y: (s.prev.y + s.last.y) / 2 };
+               var m1 = { x: (s.last.x + p.x) / 2, y: (s.last.y + p.y) / 2 };
+               dctx.lineWidth = s.width * (1 - s.jitter / 2 + Math.random() * s.jitter);
+               dctx.beginPath(); dctx.moveTo(m0.x, m0.y); dctx.quadraticCurveTo(s.last.x, s.last.y, m1.x, m1.y); dctx.stroke();
+               s.prev = s.last; s.last = p;
+               var b = s.bbox;
+               b.x0 = Math.min(b.x0, p.x); b.y0 = Math.min(b.y0, p.y); b.x1 = Math.max(b.x1, p.x); b.y1 = Math.max(b.y1, p.y);
+            });
+            s.pts = [];
+         }
+         function endStroke(e) {
+            if (!stroke || e.pointerId !== stroke.id) return;
+            flush();
+            dctx.restore();
+            var s = stroke; stroke = null;
+            bake(s);
+         }
+         draw.addEventListener('pointerup', endStroke);
+         draw.addEventListener('pointercancel', endStroke);
+         draw.addEventListener('lostpointercapture', endStroke);
+
+         // ---- pencil eraser (right mouse button): rubs out pencil marks only, never crayon
+         var erase = null;
+         function readyPencil() {   // decode the visible pages' pencil marks ahead of time
+            if (color !== PENCIL) return;
+            slots().forEach(function (sl) {
+               if (inkImgs.pencil[sl.page - 1].getAttribute('src')) inkCanvasFor('pencil', sl.page);
+            });
+         }
+         flip.on('flip', readyPencil);
+         function startErase(e) {
+            if (stroke || erase || flipState !== 'read') return;
+            e.preventDefault();
+            var sl = slots().filter(function (s) {
+               var c = inkCanvas.pencil[s.page];
+               return c && c.isReady;
+            });
+            if (!sl.length) return;
+            draw.setPointerCapture(e.pointerId);
+            var own = buttonFor(PENCIL);
+            draw.style.cursor = 'url("' + own.dataset.eraserCursor + '") ' + own.dataset.eraserHotspot + ', crosshair';
+            var p = pos(e);
+            erase = { id: e.pointerId, slots: sl, last: p, pts: [p], width: Math.max(8, sl[0].w * 0.02) };
+            // Show the visible pencil layers on the overlay while they're being rubbed out.
+            commit();
+            sl.forEach(function (s) { inkImgs.pencil[s.page - 1].style.visibility = 'hidden'; });
+            rub();
+         }
+         function rub() {
+            raf = 0;
+            if (!erase) return;
+            var er = erase;
+            er.slots.forEach(function (s) {
+               var c = inkCanvas.pencil[s.page].getContext('2d'), kx = INK_W / s.w, ky = INK_H / s.h;
+               c.globalCompositeOperation = 'destination-out';
+               c.lineCap = c.lineJoin = 'round';
+               c.lineWidth = er.width * kx;
+               c.beginPath();
+               c.moveTo((er.last.x - s.x) * kx, (er.last.y - s.y) * ky);
+               er.pts.forEach(function (p) { c.lineTo((p.x - s.x) * kx, (p.y - s.y) * ky); });
+               c.lineTo((er.pts[er.pts.length - 1].x - s.x) * kx + 0.01, (er.pts[er.pts.length - 1].y - s.y) * ky);
+               c.stroke();
+               c.globalCompositeOperation = 'source-over';
+            });
+            er.last = er.pts[er.pts.length - 1];
+            er.pts = [];
+            ectx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ectx.clearRect(0, 0, ers.width, ers.height);
+            er.slots.forEach(function (s) { ectx.drawImage(inkCanvas.pencil[s.page], s.x, s.y, s.w, s.h); });
+         }
+         draw.addEventListener('pointermove', function (e) {
+            if (!erase || e.pointerId !== erase.id) return;
+            var evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+            if (!evs.length) evs = [e];
+            evs.forEach(function (ev) { erase.pts.push(pos(ev)); });
+            if (!raf) raf = requestAnimationFrame(rub);
+         });
+         function endErase(e) {
+            if (!erase || e.pointerId !== erase.id) return;
+            if (erase.pts.length) rub();
+            var er = erase; erase = null;
+            if (color) draw.style.cursor = cursorFor(color);
+            Promise.all(er.slots.map(function (s) {
+               return showInk('pencil', s.page, inkCanvas.pencil[s.page], true, ++strokeGen);
+            })).then(function () {
+               er.slots.forEach(function (s) { inkImgs.pencil[s.page - 1].style.visibility = ''; });
+               if (!erase) { ectx.setTransform(1, 0, 0, 1, 0, 0); ectx.clearRect(0, 0, ers.width, ers.height); }
+            });
+         }
+         draw.addEventListener('pointerup', endErase);
+         draw.addEventListener('pointercancel', endErase);
+         draw.addEventListener('lostpointercapture', endErase);
+
+         // ---- baking a finished stroke into the page(s) it touched
+         function bake(s) {
+            // Snapshot with the grain applied (same grain the live mask showed).
+            var snap = document.createElement('canvas');
+            snap.width = draw.width; snap.height = draw.height;
+            var sx = snap.getContext('2d');
+            sx.drawImage(draw, 0, 0);
+            sx.globalCompositeOperation = 'destination-in';
+            sx.fillStyle = s.grain.pattern;
+            sx.fillRect(0, 0, snap.width, snap.height);
+            // Hand the stroke to the "pending" layer until the pages show it, and free the draw layer.
+            pctx.drawImage(snap, 0, 0);
+            dctx.setTransform(1, 0, 0, 1, 0, 0);
+            dctx.clearRect(0, 0, draw.width, draw.height);
+
+            var pad = s.width * 2, b = s.bbox, gen = ++strokeGen;
+            var jobs = s.slots.filter(function (sl) {
+               return b.x1 + pad > sl.x && b.x0 - pad < sl.x + sl.w && b.y1 + pad > sl.y && b.y0 - pad < sl.y + sl.h;
+            }).map(function (sl) {
+               return inkCanvasFor(s.layer, sl.page).then(function (ic) {
+                  var c = ic.getContext('2d');
+                  c.globalAlpha = 0.85;
+                  c.drawImage(snap, sl.x * dpr, sl.y * dpr, sl.w * dpr, sl.h * dpr, 0, 0, INK_W, INK_H);
+                  c.globalAlpha = 1;
+                  return showInk(s.layer, sl.page, ic, false, gen);
+               });
+            });
+         }
+         function inkCanvasFor(layer, page) {
+            var have = inkCanvas[layer][page];
+            if (have) return have.ready;
+            var c = document.createElement('canvas');
+            c.width = INK_W; c.height = INK_H;
+            inkCanvas[layer][page] = c;
+            var img = inkImgs[layer][page - 1];
+            c.ready = !img.getAttribute('src') ? Promise.resolve(c) :
+               img.decode().catch(function () {}).then(function () {
+                  c.getContext('2d').drawImage(img, 0, 0, INK_W, INK_H);
+                  return c;
+               });
+            c.ready.then(function () { c.isReady = true; });
+            return c.ready;
+         }
+         // A finished stroke stays on the crisp "pending" layer while the page sits still; the
+         // page's own (resampled) copy is swapped in only when the page starts to move, so
+         // letting go of a crayon never visibly changes the stroke. The copy is decoded ahead
+         // of time so the swap lands in a single frame.
+         var staged = {};                     // "layer/page" -> {img, url}
+         var strokeGen = 0, committedGen = 0, latest = {}; // strokes up to committedGen should already be on the pages
+         function apply(img, url) {
+            var old = img.getAttribute('src');
+            img.src = url;
+            if (old) img.decode().catch(function () {}).then(function () { URL.revokeObjectURL(old); });
+         }
+         function commit() {
+            committedGen = strokeGen;
+            Object.keys(staged).forEach(function (k) { apply(staged[k].img, staged[k].url); });
+            staged = {};
+            pctx.setTransform(1, 0, 0, 1, 0, 0);
+            pctx.clearRect(0, 0, pend.width, pend.height);
+         }
+         function showInk(layer, page, c, now, gen) {
+            return new Promise(function (done) {
+               c.toBlob(function (blob) {
+                  var k = layer + '/' + page;
+                  if (!blob || gen < (latest[k] || 0)) return done();   // a newer copy already won
+                  latest[k] = gen;
+                  save(layer, page, blob);
+                  var img = inkImgs[layer][page - 1], url = URL.createObjectURL(blob);
+                  var pre = new Image();
+                  pre.src = url;
+                  pre.decode().catch(function () {}).then(function () {
+                     // Erasing, or the page already moved on before this was ready: show it now.
+                     if (now || gen <= committedGen) {
+                        if (staged[k]) { URL.revokeObjectURL(staged[k].url); delete staged[k]; }
+                        apply(img, url);
+                        return img.decode().catch(function () {}).then(done);
+                     }
+                     if (staged[k]) URL.revokeObjectURL(staged[k].url);
+                     staged[k] = { img: img, url: url };
+                     done();
+                  });
+               }, 'image/png');
+            });
+         }
+
+
+         // ---- keeping scribbles in this browser
+         var dbp = new Promise(function (res) {
+            try {
+               var r = indexedDB.open('uncle-crayon', 1);
+               r.onupgradeneeded = function () { r.result.createObjectStore('ink'); };
+               r.onsuccess = function () { res(r.result); };
+               r.onerror = r.onblocked = function () { res(null); };
+            } catch (e) { res(null); }
+         });
+         function store(mode, fn) {
+            return dbp.then(function (db) {
+               if (!db) return null;
+               return new Promise(function (res) {
+                  try {
+                     var tx = db.transaction('ink', mode), out = fn(tx.objectStore('ink'));
+                     tx.oncomplete = function () { res(out); };
+                     tx.onerror = tx.onabort = function () { res(null); };
+                  } catch (e) { res(null); }
+               });
+            });
+         }
+         var toSave = {}, saveTimer = 0;
+         function keyFor(layer, page) { return slug + '/' + page + (layer === 'pencil' ? '/pencil' : ''); }
+         function save(layer, page, blob) {
+            toSave[keyFor(layer, page)] = blob;
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function () {
+               var batch = toSave; toSave = {};
+               store('readwrite', function (st) {
+                  Object.keys(batch).forEach(function (k) { st.put(batch[k], k); });
+               });
+            }, 500);
+         }
+         // Restore saved scribbles for this issue (after the book is already on screen).
+         store('readonly', function (st) {
+            var found = {};
+            var req = st.openCursor(IDBKeyRange.bound(slug + '/', slug + '/￿'));
+            req.onsuccess = function () {
+               var cur = req.result;
+               if (!cur) return;
+               found[cur.key.slice(slug.length + 1)] = cur.value;
+               cur.continue();
+            };
+            return found;
+         }).then(function (found) {
+            if (!found) return;
+            Object.keys(found).forEach(function (k) {
+               var parts = k.split('/'), page = +parts[0], layer = parts[1] === 'pencil' ? 'pencil' : 'crayon';
+               var img = inkImgs[layer][page - 1];
+               if (img && !img.getAttribute('src') && !inkCanvas[layer][page]) img.src = URL.createObjectURL(found[k]);
+            });
+         });
+      }
       </script>
    </body>
 </html>
