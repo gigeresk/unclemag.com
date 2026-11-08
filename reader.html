@@ -6,7 +6,7 @@
       <title>Uncle Magazine</title>
       <link rel="icon" type="image/x-icon" href="images/favicon-groucho.png">
       <style type="text/css">
-         html,body{height:100%;margin:0}
+         html,body{height:100%;margin:0;overscroll-behavior:none}
          html{background:#7f7765}
          html::before{content:"";position:fixed;top:0;left:0;right:0;height:100vh;z-index:-1;
          background:url("images/magic-eye-bg.webp") center top/600px auto repeat}
@@ -19,6 +19,10 @@
          padding:max(10px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));flex:0 0 auto}
          #stage{flex:1 1 0;display:flex;align-items:center;justify-content:center;
          min-height:0;padding:0 calc(64px + env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+         /* At normal size, the book takes one-finger drags (page turns) and the browser only pinches.
+            Zoomed in, the browser takes everything so one finger moves you around the page. */
+         #stage{touch-action:pinch-zoom}
+         html.zoomed #stage{touch-action:auto}
          @media (max-width:600px){#stage{padding-right:calc(52px + env(safe-area-inset-right))}}
          #frame{margin:0 auto;visibility:hidden}
          .page{background:#fff}
@@ -34,20 +38,31 @@
          #pending{z-index:19}
          #erasing{position:fixed;left:0;top:0;z-index:18;pointer-events:none}
          body.writing #draw{display:block;pointer-events:auto}
+         /* Crayon size: as big as --chmax, but small enough that all four fit the screen height
+            (3 crayons + a pencil 1.6x as tall + 3 gaps + a little margin). */
+         :root{--chmax:96px;--ch:min(var(--chmax),calc((100vh - 40px) / 4.6))}
+         @supports (height:100dvh){:root{--ch:min(var(--chmax),calc((100dvh - 40px) / 4.6))}}
          #crayons{position:fixed;left:-999px;top:0;z-index:21;display:flex;flex-direction:column;
          gap:10px;visibility:hidden}
-         .crayon{display:block;width:40px;height:96px;padding:0 9px;margin:0;border:0;background:none;
+         .crayon{display:block;width:40px;height:var(--ch);padding:0 9px;margin:0;border:0;background:none;
          cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .28s cubic-bezier(.34,1.56,.64,1);
          filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
-         .crayon svg{display:block;width:22px;height:96px}
-         .crayon img{display:block;height:96px;width:auto;margin:0 auto}
-         .crayon.tall{height:154px}.crayon.tall img{height:154px}
+         .crayon svg{display:block;width:22px;height:var(--ch)}
+         .crayon img{display:block;height:var(--ch);width:auto;margin:0 auto}
+         .crayon.tall,.crayon.tall img{height:calc(var(--ch) * 1.6)}
          .crayon.on{transform:translate(-6px,-10px) rotate(-12deg)}
          .crayon.held{visibility:hidden}   /* desktop: it's in your hand (the cursor) */
          .flying{position:fixed;left:0;top:0;z-index:30;pointer-events:none;transform-origin:50% 50%;
          filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
          .flying svg,.flying img{display:block;width:100%;height:100%}
-         @media (max-width:600px){.crayon{width:34px;height:76px;padding:0 7px}.crayon svg{width:20px;height:76px}.crayon img{height:76px}.crayon.tall{height:122px}.crayon.tall img{height:122px}}
+         @media (max-width:600px){:root{--chmax:76px}.crayon{width:34px;padding:0 7px}.crayon svg{width:20px}}
+         /* Phone on its side: put Back/PDF in the left margin so the book gets the full height. */
+         @media (orientation:landscape) and (max-height:500px){
+            .bar{position:fixed;top:0;left:0;z-index:5;flex-direction:column;align-items:flex-start;gap:8px;
+            padding:max(8px,env(safe-area-inset-top)) 8px 8px max(10px,env(safe-area-inset-left))}
+            #stage{padding-top:max(8px,env(safe-area-inset-top));padding-bottom:max(8px,env(safe-area-inset-bottom));
+            padding-left:calc(84px + env(safe-area-inset-left))}
+         }
       </style>
    </head>
    <body>
@@ -102,7 +117,7 @@
          }
          if (typeof St === 'undefined') return fallBack();
 
-         var n = info.pages, ratio = info.width / info.height, MINW = 200;
+         var n = info.pages, ratio = info.width / info.height, MINW = 200, PF_MIN = 100;
 
          // Book layout, by page-flip index: [filler, cover], [2, 3], ... , [last, filler?]
          // The library hides the page being turned by drawing the page underneath over it, so
@@ -147,31 +162,38 @@
          imgs.slice(1).forEach(function (img, k) { img.src = dir + (k + 2) + '.webp'; });
 
          // Size the book so a spread (or single page on narrow screens) fits the viewport.
+         // Two pages when each is still a decent size (desktop), or when they come out nearly as
+         // big as one page alone would (a phone on its side, where height is what limits them).
+         var frameW = 0, spread = true;
          function fit() {
             var cs = getComputedStyle(stage);   // padding leaves room for the crayons on the right
             var aw = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-            var ah = stage.clientHeight - parseFloat(cs.paddingBottom);
-            var w = Math.min(aw, ah * ratio * 2);
-            if (w < MINW * 2) w = Math.min(aw, ah * ratio);
-            frame.style.width = Math.max(MINW, Math.floor(w)) + 'px';
+            var ah = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+            var spreadW = Math.min(aw, ah * ratio * 2), singleW = Math.min(aw, ah * ratio);
+            spread = spreadW / 2 >= MINW || spreadW / 2 >= 0.75 * singleW;
+            frameW = Math.max(spread ? 2 * PF_MIN : PF_MIN, Math.floor(spread ? spreadW : singleW));
+            frame.style.width = frameW + 'px';
+            // page-flip shows one page when the book is narrower than 2 x minWidth; steer it with that.
+            if (flip) flip.getSettings().minWidth = spread ? PF_MIN : frameW;
          }
-         window.addEventListener('resize', fit);
+         window.addEventListener('resize', fit);   // added before page-flip's own resize handler, so it runs first
+         var flip;
          fit();
 
-         var flip;
          try {
          flip = new St.PageFlip(book, {
             width: info.width, height: info.height,
             size: 'stretch',
-            minWidth: MINW, maxWidth: 2000,
-            minHeight: MINW / ratio, maxHeight: 2000 / ratio,
+            minWidth: spread ? PF_MIN : frameW, maxWidth: 2000,
+            minHeight: PF_MIN / ratio, maxHeight: 2000 / ratio,
             startPage: 1,
             usePortrait: true,
             maxShadowOpacity: 0.5,
-            mobileScrollSupport: false
+            mobileScrollSupport: true   // don't cancel every touch on the book; that blocks pinch-zoom
          });
          flip.loadFromHTML(book.querySelectorAll('.page'));
          } catch (e) { return fallBack(); }
+         book.style.minWidth = book.style.minHeight = '';   // fit() sizes the book; don't let a stale minimum win
          status.style.display = 'none';
          frame.style.visibility = 'visible';
 
@@ -198,6 +220,40 @@
          }
          flip.on('flip', skipFillers);
          flip.on('changeOrientation', skipFillers);
+
+         // Pinch to zoom (when no crayon is out). page-flip reads any touch on the book as the
+         // start of a page turn, so two-finger gestures, and every touch while zoomed in, are kept
+         // away from it and left to the browser. Pinch back out to turn pages again.
+         var pinching = false;
+         function zoomed() { return !!window.visualViewport && window.visualViewport.scale > 1.01; }
+         if (window.visualViewport) window.visualViewport.addEventListener('resize', function () {
+            document.documentElement.classList.toggle('zoomed', zoomed());
+         });
+         ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function (t) {
+            window.addEventListener(t, function (e) {
+               if (document.body.classList.contains('writing')) return;   // crayons handle their own touches
+               if (e.touches.length > 1 && !pinching && flip.getState() === 'read') {
+                  pinching = true;
+                  flip.getUI().touchPoint = null;        // the first finger is no longer a swipe or a tap
+                  flip.userStop({ x: 0, y: 0 }, true);   // ...nor the start of a drag
+               }
+               if (pinching || zoomed()) e.stopPropagation();
+               if (e.touches.length === 0) pinching = false;
+            }, true);
+         });
+
+         // Don't let a swipe, drag, tap or corner peek turn onto a filler. page-flip only checks
+         // that another page index exists (and the fillers are pages), so every flip it starts
+         // is gated here instead: nothing before the cover, nothing after the last page.
+         var fc = flip.getFlipController(), pageExists = fc.checkDirection.bind(fc);
+         fc.checkDirection = function (dir) {   // page-flip: 0 = forward, 1 = back
+            var i = flip.getCurrentPageIndex(), first, last;
+            if (flip.getOrientation() === 'portrait') first = last = i;
+            else { first = Math.floor(i / 2) * 2; last = first + 1; }   // same spread maths as slots()
+            if (dir === 0 && last >= n) return false;
+            if (dir === 1 && first <= 1) return false;
+            return pageExists(dir);
+         };
          document.addEventListener('keydown', function (e) {
             if (document.body.classList.contains('writing')) return;   // no page turning with a crayon
             var i = flip.getCurrentPageIndex();
@@ -294,7 +350,7 @@
                setMask();
                var bw = box.offsetWidth, bh = box.offsetHeight;
                box.style.left = Math.min(window.innerWidth - bw - 4, b.left + r.left + 2 * r.pageWidth + 6) + 'px';
-               box.style.top = Math.max(4, b.top + r.top + r.height / 2 - bh / 2) + 'px';
+               box.style.top = Math.max(4, Math.min(window.innerHeight - bh - 4, b.top + r.top + r.height / 2 - bh / 2)) + 'px';
                box.style.visibility = 'visible';
             }
             requestAnimationFrame(layout);
