@@ -7,14 +7,16 @@
       <link rel="icon" type="image/x-icon" href="images/favicon-groucho.png">
       <style type="text/css">
          html,body{height:100%;margin:0;overscroll-behavior:none}
-         html{background:#7f7765}
-         html::before{content:"";position:fixed;top:0;left:0;right:0;height:100vh;z-index:-1;
-         background:url("images/magic-eye-bg.webp") center top/600px auto repeat}
+         html{background:#7f7765 url("images/magic-eye-bg.webp") center top/600px auto repeat}
          body{display:flex;flex-direction:column;overflow:hidden;font-family:sans-serif;
          font-size:18px;color:#fff;font-weight:bold;
          text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,
          0 -2px 0 #000,0 2px 0 #000,-2px 0 0 #000,2px 0 0 #000,0 0 8px #000}
          a{color:#fff}
+         /* It's a magazine, not a document: no selection highlight (Ctrl+A, drags) or image dragging. */
+         html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+         ::selection{background:transparent}
+         img{-webkit-user-drag:none}
          .bar{display:flex;align-items:center;justify-content:space-between;gap:12px;
          padding:max(10px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));flex:0 0 auto}
          #stage{flex:1 1 0;display:flex;align-items:center;justify-content:center;
@@ -23,6 +25,10 @@
             Zoomed in, the browser takes everything so one finger moves you around the page. */
          #stage{touch-action:pinch-zoom}
          html.zoomed #stage{touch-action:auto}
+         /* page-flip gives the book touch-action:pan-y, which (touch-action is combined down the
+            tree) switches pinch-zoom off over the whole book. The id selector beats its class rule. */
+         #book{touch-action:pinch-zoom}
+         html.zoomed #book{touch-action:auto}
          @media (max-width:600px){#stage{padding-right:calc(52px + env(safe-area-inset-right))}}
          #frame{margin:0 auto;visibility:hidden}
          .page{background:#fff}
@@ -34,12 +40,13 @@
          .page .ink{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
          .page .ink:not([src]){display:none}
          #draw,#pending{position:fixed;left:0;top:0;opacity:.85;pointer-events:none}
-         #draw{display:none;touch-action:none;z-index:20}
+         /* One finger draws; two fingers still zoom and pan the page (phones). */
+         #draw{display:none;touch-action:pinch-zoom;z-index:20}
          #pending{z-index:19}
          #erasing{position:fixed;left:0;top:0;z-index:18;pointer-events:none}
          body.writing #draw{display:block;pointer-events:auto}
-         /* Crayon size: as big as --chmax, but small enough that all four fit the screen height
-            (3 crayons + a pencil 1.6x as tall + 3 gaps + a little margin). */
+         /* Crayon size: as big as --chmax, but small enough that the whole column fits the screen
+            height (3 crayons + a pencil 1.6x as tall + 3 gaps + a little margin). */
          :root{--chmax:96px;--ch:min(var(--chmax),calc((100vh - 40px) / 4.6))}
          @supports (height:100dvh){:root{--ch:min(var(--chmax),calc((100dvh - 40px) / 4.6))}}
          #crayons{position:fixed;left:-999px;top:0;z-index:21;display:flex;flex-direction:column;
@@ -55,6 +62,30 @@
          .flying{position:fixed;left:0;top:0;z-index:30;pointer-events:none;transform-origin:50% 50%;
          filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
          .flying svg,.flying img{display:block;width:100%;height:100%}
+         /* Magnifying glass (desktop only). It starts small, held in a fist at the left, halfway up;
+            pull it out and it grows, drop it back on the (open) hand to put it away. */
+         #loupe{position:fixed;left:0;top:0;z-index:22;display:none;pointer-events:none;touch-action:none;
+         -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+         #loupe.out{display:block}
+         #loupe canvas{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:50%;
+         pointer-events:auto;cursor:grab}
+         body.writing #loupe canvas{pointer-events:none}   /* drawing goes through the glass */
+         #loupe svg{position:absolute;left:-20%;top:-20%;width:210%;height:210%;overflow:visible;pointer-events:none;
+         filter:drop-shadow(0 6px 8px rgba(0,0,0,.45))}
+         #loupe .grip{pointer-events:visiblePainted;cursor:grab}
+         #loupe .rim.grip{pointer-events:visibleStroke}
+         #loupe.dragging canvas,#loupe.dragging .grip{cursor:grabbing}
+         .hand{position:fixed;left:0;top:0;display:none;visibility:hidden;pointer-events:none;
+         -webkit-user-drag:none;user-select:none;filter:drop-shadow(0 4px 6px rgba(0,0,0,.45))}
+         #handOpen{z-index:21;transform-origin:50% 100%;transition:transform .15s}   /* under the glass */
+         #handOpen.ready{transform:scale(1.07)}   /* "drop it here" */
+         #handFist{z-index:23;pointer-events:auto;cursor:grab}   /* over the handle it grips */
+         /* Desktop: bigger crayons (they're thin, so they need the size to be seen). */
+         @media (hover:hover) and (pointer:fine){
+            :root{--chmax:144px}
+            .crayon{width:56px;padding:0 12px}
+            #stage{padding-right:calc(88px + env(safe-area-inset-right));padding-left:calc(112px + env(safe-area-inset-left))}
+         }
          @media (max-width:600px){:root{--chmax:76px}.crayon{width:34px;padding:0 7px}.crayon svg{width:20px}}
          /* Phone on its side: put Back/PDF in the left margin so the book gets the full height. */
          @media (orientation:landscape) and (max-height:500px){
@@ -81,6 +112,33 @@
          <button class="crayon" data-color="#EDBE1F" style="--c:#EDBE1F" aria-label="Yellow crayon" aria-pressed="false" data-cursor="images/crayon-yellow-cursor.png" data-hotspot="1 38" data-cursor-len="54"><img src="images/crayon-yellow.png" alt=""></button>
          <button class="crayon tall" data-color="#4a4a4a" style="--c:#4a4a4a" aria-label="Pencil (right-click erases)" aria-pressed="false" data-cursor="images/pencil-cursor.png" data-hotspot="1 38" data-cursor-len="56" data-eraser-cursor="images/pencil-eraser-cursor.png" data-eraser-hotspot="1 37"><img src="images/pencil.png" alt=""></button>
       </div>
+      <div id="loupe">
+         <canvas></canvas>
+         <svg viewBox="-140 -140 420 420" aria-hidden="true">
+            <!-- The magnifier photo (images/magnifier.png: background cut away, glass see-through
+                 apart from its glare). Placed so the glass is a circle of radius 100 round (0,0) and
+                 the handle runs out at 45 degrees; #lensArm turns it for the hand. The shapes after
+                 it are invisible grab areas over the rim, neck and handle. -->
+            <g id="lensArm">
+               <image href="images/magnifier.png" x="-143.95" y="-142.66" width="416.3" height="416.3"/>
+               <circle class="rim grip" r="104.5" fill="none" stroke="#000" stroke-width="12" opacity="0"/>
+               <g transform="rotate(45)">
+                  <rect class="grip" x="105" y="-12" width="32" height="24" fill="#000" opacity="0"/>
+                  <rect class="grip" x="134" y="-17" width="191" height="34" rx="8" fill="#000" opacity="0"/>
+               </g>
+            </g>
+            <!-- The glass itself is drawn, not photographed: a faint inner highlight and two soft
+                 glare reflections (top, and lower left) over the magnified view. -->
+            <defs>
+               <linearGradient id="lt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity=".08"/></linearGradient>
+            </defs>
+            <circle r="99.3" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="1.2"/>
+            <path d="M-83 -48 A96 96 0 0 1 79 -55 Q0 -78 -83 -48 Z" fill="url(#lt)"/>
+            <path d="M-40.6 87 A96 96 0 0 1 -94.5 -16.7 Q-72 42 -40.6 87 Z" fill="#fff" opacity=".4"/>
+         </svg>
+      </div>
+      <img id="handOpen" class="hand" src="images/hand-open.png" alt="">
+      <img id="handFist" class="hand" src="images/hand-fist.png" alt="">
 
       <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
       <script>
@@ -221,6 +279,76 @@
          flip.on('flip', skipFillers);
          flip.on('changeOrientation', skipFillers);
 
+         // Page-turn sound: sounds/page-turn.mp3 if it's there, otherwise one made on the fly with
+         // Web Audio (a papery swish with a little crinkle, then the page landing). Pitch and
+         // loudness vary a bit each time. Browsers only allow sound after a click/tap/key, which
+         // is always how a turn starts anyway.
+         var SOUND_FILE = 'sounds/page-turn.mp3';
+         var audio = null;
+         function unlockAudio() {
+            var AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return;
+            if (!audio) {
+               try { audio = new AC(); } catch (e) { return; }
+               var sr = audio.sampleRate;
+               audio.swish = audio.createBuffer(1, Math.floor(sr * 0.5), sr);
+               var d = audio.swish.getChannelData(0), crinkle = 0, soft = 0;
+               for (var i = 0; i < d.length; i++) {
+                  var t = i / sr, env = t < 0.06 ? t / 0.06 : Math.exp(-(t - 0.06) / 0.11);
+                  if (Math.random() < 0.004) crinkle = 1;   // little bursts, like paper catching
+                  crinkle *= 0.995;
+                  var w = Math.random() * 2 - 1;
+                  soft = soft * 0.6 + w * 0.4;
+                  d[i] = (soft * 0.8 + w * 0.2) * env * (0.55 + 0.45 * crinkle);
+               }
+               audio.thump = audio.createBuffer(1, Math.floor(sr * 0.08), sr);
+               d = audio.thump.getChannelData(0);
+               for (i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / sr / 0.015);
+               var ctx = audio;
+               fetch(SOUND_FILE).then(function (r) { if (!r.ok) throw 0; return r.arrayBuffer(); }).then(function (bytes) {
+                  return new Promise(function (ok, bad) { ctx.decodeAudioData(bytes, ok, bad); });   // callback form for older Safari
+               }).then(function (buf) { ctx.file = buf; }, function () {});
+            }
+            if (audio.state === 'suspended') audio.resume();
+         }
+         ['pointerdown', 'keydown', 'touchend'].forEach(function (t) {
+            window.addEventListener(t, unlockAudio, { capture: true, passive: true });
+         });
+         function pageSound() {
+            if (!audio || audio.state !== 'running') return;
+            var now = audio.currentTime, k = 0.85 + Math.random() * 0.3;
+            if (audio.file) {   // the recorded sound, nudged a little in pitch and loudness
+               var f = audio.createBufferSource(), fg = audio.createGain();
+               f.buffer = audio.file;
+               f.playbackRate.value = 0.95 + Math.random() * 0.1;
+               fg.gain.value = 0.8 + Math.random() * 0.2;
+               f.connect(fg); fg.connect(audio.destination);
+               f.start(now);
+               return;
+            }
+            var src = audio.createBufferSource(), hp = audio.createBiquadFilter(), bp = audio.createBiquadFilter(), g = audio.createGain();
+            src.buffer = audio.swish;
+            src.playbackRate.value = k;
+            hp.type = 'highpass'; hp.frequency.value = 350;
+            bp.type = 'bandpass'; bp.Q.value = 0.6;
+            bp.frequency.setValueAtTime(1300 * k, now);
+            bp.frequency.linearRampToValueAtTime(3400 * k, now + 0.12);
+            bp.frequency.exponentialRampToValueAtTime(900 * k, now + 0.42);
+            g.gain.value = 0.45 * (0.8 + Math.random() * 0.2);
+            src.connect(hp); hp.connect(bp); bp.connect(g); g.connect(audio.destination);
+            src.start(now);
+            var th = audio.createBufferSource(), lp = audio.createBiquadFilter(), tg = audio.createGain();
+            th.buffer = audio.thump;
+            lp.type = 'lowpass'; lp.frequency.value = 450;
+            tg.gain.value = 0.3;
+            th.connect(lp); lp.connect(tg); tg.connect(audio.destination);
+            th.start(now + 0.3 / k);
+         }
+         // Clicks, keys and swipes go through page-flip's "flipping" state; letting go of a page
+         // you're dragging finishes (or drops back) straight from "user_fold".
+         flip.on('changeState', function (e) { if (e.data === 'flipping') pageSound(); });
+         window.addEventListener('pointerup', function () { if (flip.getState() === 'user_fold') pageSound(); }, true);
+
          // Pinch to zoom (when no crayon is out). page-flip reads any touch on the book as the
          // start of a page turn, so two-finger gestures, and every touch while zoomed in, are kept
          // away from it and left to the browser. Pinch back out to turn pages again.
@@ -261,14 +389,14 @@
             if (e.key === 'ArrowRight' && i < n) flip.flipNext();
          });
 
-         startCrayons(flip, n, ratio, slug, inkImgs);
+         startCrayons(flip, n, ratio, slug, inkImgs, imgs);
       })();
 
       // ---------------------------------------------------------------- crayons
       // Pick a crayon (right of the magazine) to scribble on the pages; tap it again to go
       // back to flipping. Scribbles live in an <img class="ink"> inside each page so they bend
       // and flip with it, and are kept in this browser (IndexedDB).
-      function startCrayons(flip, n, ratio, slug, inkImgs) {
+      function startCrayons(flip, n, ratio, slug, inkImgs, imgs) {
          var body = document.body;
          var draw = document.getElementById('draw'), dctx = draw.getContext('2d');
          var pend = document.getElementById('pending'), pctx = pend.getContext('2d');
@@ -359,6 +487,7 @@
          // ---- picking crayons
          function cursorFor(c) {
             var own = buttonFor(c);
+            if (own && own.dataset.bigCursor) return 'url("' + own.dataset.bigCursor + '") ' + own.dataset.bigHotspot + ', crosshair';
             if (own && own.dataset.cursor) return 'url("' + own.dataset.cursor + '") ' + own.dataset.hotspot + ', crosshair';
             if (c === PENCIL) return 'url("data:image/svg+xml,' + encodeURIComponent(
                '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
@@ -378,6 +507,35 @@
          var lastX = -1, lastY = -1;
          document.addEventListener('pointermove', function (e) { lastX = e.clientX; lastY = e.clientY; }, { passive: true });
          buttons.forEach(function (b) { if (b.dataset.cursor) new Image().src = b.dataset.cursor; });
+         // Desktop cursors CUR times the size of the cursor PNGs, drawn from the big crayon art so
+         // they stay sharp: the crayon tilted with its tip at the bottom left (the hotspot), or for
+         // the eraser the pencil's other end. Until they're ready the PNG cursors are used.
+         var CUR = 1.5;
+         buttons.forEach(function (b) {
+            if (!b.dataset.cursor) return;
+            var art = new Image();
+            art.onload = function () {
+               var L = (+b.dataset.cursorLen || 54) * CUR, w = L * art.naturalWidth / art.naturalHeight, h45 = Math.SQRT1_2;
+               function make(eraser) {
+                  var S = Math.min(128, Math.ceil((L + w) * h45 + 4));
+                  var c = document.createElement('canvas');
+                  c.width = c.height = S;
+                  var x = c.getContext('2d'), tx = 2 + w / 2 * h45, ty = S - 2 - w / 2 * h45;
+                  x.translate(tx, ty);
+                  x.rotate(eraser ? Math.PI / 4 : -3 * Math.PI / 4);   // either way the body runs up and to the right
+                  x.drawImage(art, -w / 2, eraser ? -L : 0, w, L);
+                  return { url: c.toDataURL(), hot: Math.round(tx) + ' ' + Math.round(ty) };
+               }
+               var m = make(false);
+               b.dataset.bigCursor = m.url; b.dataset.bigHotspot = m.hot;
+               if (b.dataset.eraserCursor) {
+                  m = make(true);
+                  b.dataset.bigEraserCursor = m.url; b.dataset.bigEraserHotspot = m.hot;
+               }
+               if (color === b.dataset.color && !erase) draw.style.cursor = cursorFor(color);
+            };
+            art.src = b.querySelector('img').src;
+         });
          function buttonFor(c) { return buttons.filter(function (b) { return b.dataset.color === c; })[0]; }
 
          // (x, y): where the previous crayon was let go, so it can zip back from there.
@@ -402,7 +560,7 @@
          function zipBack(c, x, y) {
             var b = buttonFor(c), art = b.firstElementChild, home = art.getBoundingClientRect();
             var w = home.width, h = home.height;
-            var s0 = (b.dataset.cursorLen ? +b.dataset.cursorLen : 31) / h;   // starts the size of the cursor
+            var s0 = (b.dataset.cursorLen ? +b.dataset.cursorLen * (b.dataset.bigCursor ? CUR : 1) : 31) / h;   // starts the size of the cursor
             var fly = document.createElement('div');
             fly.className = 'flying';
             fly.style.cssText = 'width:' + w + 'px;height:' + h + 'px;--c:' + c;
@@ -445,7 +603,7 @@
             return slots().some(function (s) { return x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h; });
          }
          document.addEventListener('pointerdown', function (e) {
-            if (!color || box.contains(e.target)) return;
+            if (!color || box.contains(e.target) || isGlass(e.target)) return;
             if (e.target === draw && onPage(e.clientX, e.clientY)) return;
             setColor(null, e.clientX, e.clientY);
          }, true);
@@ -457,6 +615,8 @@
 
          draw.addEventListener('contextmenu', function (e) { if (color) e.preventDefault(); });
          draw.addEventListener('pointerdown', function (e) {
+            // A second finger: that's a pinch, not drawing. Drop the stroke the first one started.
+            if (stroke && e.pointerType === 'touch' && e.pointerId !== stroke.id) return cancelStroke();
             if (color === PENCIL && e.pointerType === 'mouse' && e.button === 2) return startErase(e);
             if (!color || stroke || erase || flipState !== 'read' || (e.pointerType === 'mouse' && e.button !== 0)) return;
             var sl = slots();
@@ -507,8 +667,15 @@
             var s = stroke; stroke = null;
             bake(s);
          }
+         function cancelStroke() {   // the browser took the touch over (a pinch): forget the stroke
+            if (!stroke) return;
+            stroke = null;
+            dctx.restore();
+            dctx.setTransform(1, 0, 0, 1, 0, 0);
+            dctx.clearRect(0, 0, draw.width, draw.height);
+         }
          draw.addEventListener('pointerup', endStroke);
-         draw.addEventListener('pointercancel', endStroke);
+         draw.addEventListener('pointercancel', cancelStroke);
          draw.addEventListener('lostpointercapture', endStroke);
 
          // ---- pencil eraser (right mouse button): rubs out pencil marks only, never crayon
@@ -530,7 +697,9 @@
             if (!sl.length) return;
             draw.setPointerCapture(e.pointerId);
             var own = buttonFor(PENCIL);
-            draw.style.cursor = 'url("' + own.dataset.eraserCursor + '") ' + own.dataset.eraserHotspot + ', crosshair';
+            draw.style.cursor = own.dataset.bigEraserCursor
+               ? 'url("' + own.dataset.bigEraserCursor + '") ' + own.dataset.bigEraserHotspot + ', crosshair'
+               : 'url("' + own.dataset.eraserCursor + '") ' + own.dataset.eraserHotspot + ', crosshair';
             var p = pos(e);
             erase = { id: e.pointerId, slots: sl, last: p, pts: [p], width: Math.max(8, sl[0].w * 0.02) };
             // Show the visible pencil layers on the overlay while they're being rubbed out.
@@ -721,6 +890,418 @@
                var img = inkImgs[layer][page - 1];
                if (img && !img.getAttribute('src') && !inkCanvas[layer][page]) img.src = URL.createObjectURL(found[k]);
             });
+         });
+
+         // ---- magnifying glass (desktop only; phones pinch-zoom instead)
+         // It starts small in a fist at the left, halfway up. Pull it out (the hand opens, the glass
+         // grows), drag it about (by the rim or handle while a crayon is out, so you can draw
+         // through it: strokes land under the pointer, on the page beneath the glass). The lens
+         // redraws the pages around it into a hidden canvas ("src") and a WebGL shader bends that
+         // like a real lens: 2x in the middle, squeezed toward the rim with a little colour
+         // fringing, so the view meets the page outside without a seam.
+         var loupe = document.getElementById('loupe'), lensCv = loupe.querySelector('canvas');
+         var MAG = 2, FRINGE = 0.012, SRC_PAD = 1.04;   // src covers a little past the rim, for the fringing
+         var lens = { out: desktop, held: true, x: 0, y: 0, R: 80, s: 1, a: 45 };   // s: scale, a: handle angle
+         var arm = document.getElementById('lensArm');
+         var handOpen = document.getElementById('handOpen'), handFist = document.getElementById('handFist');
+         var src = document.createElement('canvas'), sctx = src.getContext('2d');
+         var tmp = document.createElement('canvas'), tctx = tmp.getContext('2d');
+         var bgImg = new Image();
+         bgImg.src = 'images/magic-eye-bg.webp';
+
+         var gl = null, glOK = false;
+         if (desktop) try { gl = lensCv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false }); } catch (e) {}
+         if (gl) {
+            var vs = 'attribute vec2 a; varying vec2 p; void main(){ p = a; gl_Position = vec4(a, 0., 1.); }';
+            var fs = [
+               'precision mediump float;',
+               'varying vec2 p; uniform sampler2D t; uniform float mag, fringe, fit, px;',
+               'vec2 tc(vec2 q){ return vec2(.5 + .5 * q.x, .5 - .5 * q.y); }',
+               'void main(){',
+               '  float u = length(p);',
+               '  if (u > 1.) { gl_FragColor = vec4(0.); return; }',
+               '  float u4 = u * u * u * u;',
+               '  vec2 q = p * (1. / mag + (1. - 1. / mag) * u4) * fit;',
+               '  float r = texture2D(t, tc(q * (1. + fringe * u4))).r;',
+               '  float g = texture2D(t, tc(q)).g;',
+               '  float b = texture2D(t, tc(q * (1. - fringe * u4))).b;',
+               '  vec3 c = vec3(r, g, b) * vec3(.975, .99, 1.);',          // a faint cool tint
+               '  c *= 1. - .25 * smoothstep(.7, 1., u);',                  // darker toward the rim
+               '  float a = 1. - smoothstep(1. - px, 1., u);',
+               '  gl_FragColor = vec4(c * a, a);',
+               '}'].join('\n');
+            var prog = gl.createProgram();
+            [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]].forEach(function (d) {
+               var sh = gl.createShader(d[0]);
+               gl.shaderSource(sh, d[1]); gl.compileShader(sh); gl.attachShader(prog, sh);
+            });
+            gl.linkProgram(prog);
+            if (gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+               gl.useProgram(prog);
+               gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+               gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+               var aLoc = gl.getAttribLocation(prog, 'a');
+               gl.enableVertexAttribArray(aLoc);
+               gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+               gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+               gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+               gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+               gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+               gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+               gl.uniform1f(gl.getUniformLocation(prog, 'mag'), MAG);
+               gl.uniform1f(gl.getUniformLocation(prog, 'fringe'), FRINGE);
+               gl.uniform1f(gl.getUniformLocation(prog, 'fit'), 1 / SRC_PAD);
+               var pxLoc = gl.getUniformLocation(prog, 'px');
+               glOK = true;
+            }
+         }
+         if (!glOK) gl = null;
+         var lctx = gl || !desktop ? null : lensCv.getContext('2d');   // no WebGL: a plain 2x circle
+
+         function sizeLens() {
+            var D = Math.round(Math.max(220, Math.min(360, 0.42 * Math.min(window.innerWidth, window.innerHeight))));
+            var px = Math.round(D * (window.devicePixelRatio || 1));
+            lens.R = D / 2;
+            loupe.style.width = loupe.style.height = D + 'px';
+            if (lensCv.width !== px) {
+               lensCv.width = lensCv.height = px;
+               if (gl) { gl.viewport(0, 0, px, px); gl.uniform1f(pxLoc, 2 / px); }
+            }
+         }
+         function applyLens() {
+            loupe.style.transform = 'translate(' + (lens.x - lens.R) + 'px,' + (lens.y - lens.R) + 'px)' +
+                                    (lens.s !== 1 ? ' scale(' + lens.s + ')' : '');
+            arm.setAttribute('transform', 'rotate(' + (lens.a - 45) + ')');   // the photo's handle is already at 45
+         }
+         function placeLens(x, y) {   // the centre stays on screen
+            lens.x = Math.max(0, Math.min(window.innerWidth, x));
+            lens.y = Math.max(0, Math.min(window.innerHeight, y));
+            applyLens();
+         }
+
+         // The hand: the two photos (cropped from the same shot) lined up at the wrist, upright
+         // in the left margin with fist and glass level with the middle of the book. Sizes are
+         // in the images' own pixels.
+         var FIST = { w: 150, wristX: 53, wristY: 187, rodX: 74, rodY: 47 };   // rod: where the handle goes through
+         var OPEN = { w: 238, wristX: 90, wristY: 314 };
+         var HAND = 0.62, OPEN_K = HAND * 0.88;   // the open-hand photo is a little bigger than the fist
+         // The handle is HANDLE_U SVG units thick (glass radius = 100); in the fist it's HANDLE_PX
+         // wide, gripped GRIP_AT units out from the centre of the glass (just past the chrome neck).
+         var HANDLE_U = 32.7, HANDLE_PX = 21, GRIP_AT = 215, HELD_A = 160, OUT_A = 45;
+         var rod = { x: 0, y: 0 };
+         function placeHand() {
+            var fr = document.getElementById('frame').getBoundingClientRect();
+            var mid = fr.height ? fr.top + fr.height / 2 : window.innerHeight / 2;
+            var rise = GRIP_AT * HANDLE_PX / HANDLE_U * Math.sin(HELD_A * Math.PI / 180);   // glass sits this much above the fist
+            var wx = 12 + FIST.wristX * HAND, wy = mid + rise / 2 - (FIST.rodY - FIST.wristY) * HAND;
+            function put(img, g, k) {
+               img.style.width = g.w * k + 'px';
+               img.style.left = wx - g.wristX * k + 'px';
+               img.style.top = wy - g.wristY * k + 'px';
+            }
+            put(handFist, FIST, HAND);
+            put(handOpen, OPEN, OPEN_K);
+            rod.x = wx + (FIST.rodX - FIST.wristX) * HAND;
+            rod.y = wy + (FIST.rodY - FIST.wristY) * HAND;
+         }
+         function heldPose() {   // small, handle through the fist, lens up and to the right of it
+            var unit = HANDLE_PX / HANDLE_U, a = HELD_A * Math.PI / 180;
+            return { x: rod.x - GRIP_AT * unit * Math.cos(a), y: rod.y - GRIP_AT * unit * Math.sin(a),
+                     s: unit / (lens.R / 100), a: HELD_A };
+         }
+         function showHand() {   // closed while it holds the glass, open otherwise
+            handFist.style.pointerEvents = '';
+            handFist.style.visibility = lens.held ? 'visible' : 'hidden';
+            handOpen.style.visibility = lens.held ? 'hidden' : 'visible';
+         }
+         // While the glass is out, the empty hand now and then (every 10-20s) clenches and opens
+         // twice, quickly: "give it back". It stops the moment the glass is picked up or returned.
+         function beckon() {
+            setTimeout(beckon, 10000 + Math.random() * 10000);
+            if (!lens.out || lens.held || drag || tween || document.hidden) return;
+            var steps = [true, false, true, false];   // fist, open, fist, open
+            (function step(i) {
+               if (lens.held || drag || tween) return showHand();
+               handFist.style.pointerEvents = 'none';   // the empty fist is only for show
+               handFist.style.visibility = steps[i] ? 'visible' : 'hidden';
+               handOpen.style.visibility = steps[i] ? 'hidden' : 'visible';
+               if (i + 1 < steps.length) setTimeout(function () { step(i + 1); }, 140);
+               else handFist.style.pointerEvents = '';
+            })(0);
+         }
+         if (desktop) setTimeout(beckon, 10000 + Math.random() * 10000);
+         function overHand(x, y) {
+            var r = handOpen.getBoundingClientRect(), m = 24;
+            return x > r.left - m && x < r.right + m && y > r.top - m && y < r.bottom + m;
+         }
+         // Where the glass was last out (fractions of the screen), so a click on the hand can put
+         // it back there. Kept in this browser along with whether it's in the hand.
+         var spot = null;
+         function save() {
+            if (!lens.held) spot = { x: lens.x / window.innerWidth, y: lens.y / window.innerHeight };
+            try { localStorage.setItem('uncle-glass', JSON.stringify({ held: lens.held, x: spot && spot.x, y: spot && spot.y })); } catch (e) {}
+         }
+         function spotPose() {   // full size at the remembered spot, or over the middle of the book
+            var fr = document.getElementById('frame').getBoundingClientRect();
+            var x = spot ? spot.x * window.innerWidth : fr.left + fr.width / 2;
+            var y = spot ? spot.y * window.innerHeight : fr.top + fr.height / 2;
+            return { x: Math.max(0, Math.min(window.innerWidth, x)), y: Math.max(0, Math.min(window.innerHeight, y)), s: 1, a: OUT_A };
+         }
+         function goHome() {   // into the hand, which closes on it
+            animateTo(heldPose(), 260, function () { lens.held = true; showHand(); save(); });
+         }
+         // Glide to a pose (or to wherever target() says, e.g. the pointer), then call done.
+         var tween = null;
+         function animateTo(target, dur, done) {
+            tween = { t0: performance.now(), dur: dur, from: { x: lens.x, y: lens.y, s: lens.s, a: lens.a }, target: target, done: done };
+         }
+         (function tweenLoop() {
+            requestAnimationFrame(tweenLoop);
+            if (!tween) {
+               // Being dragged: full size, but shrinking to hand size and turning to the holding
+               // angle over the hand, so you can see it'll go back in. The pointer keeps its spot.
+               if (drag) {
+                  var hp = heldPose(), ts = drag.over ? hp.s * 1.25 : 1, ta = drag.over ? HELD_A : OUT_A;
+                  lens.s += (ts - lens.s) * 0.25;
+                  lens.a += (ta - lens.a) * 0.25;
+                  placeLens(ptr.x + drag.nx * lens.R * lens.s, ptr.y + drag.ny * lens.R * lens.s);
+               }
+               return;
+            }
+            var t = Math.min(1, (performance.now() - tween.t0) / tween.dur), e = 1 - Math.pow(1 - t, 3);
+            var to = typeof tween.target === 'function' ? tween.target() : tween.target, f = tween.from;
+            lens.x = f.x + (to.x - f.x) * e; lens.y = f.y + (to.y - f.y) * e;
+            lens.s = f.s + (to.s - f.s) * e; lens.a = f.a + (to.a - f.a) * e;
+            applyLens();
+            if (t >= 1) { var done = tween.done; tween = null; if (done) done(); }
+         })();
+         window.addEventListener('resize', function () {
+            if (!lens.out) return;
+            sizeLens();
+            placeHand();
+            if (lens.held) { var p = heldPose(); lens.x = p.x; lens.y = p.y; lens.s = p.s; lens.a = p.a; applyLens(); }
+            else placeLens(lens.x, lens.y);
+         });
+
+         // The magic-eye tiles (600px wide) starting at (ox, oy), covering x0..x1, y0..y1.
+         function tiles(ox, oy, x0, y0, x1, y1) {
+            if (!bgImg.naturalWidth) return;
+            var tw = 600, th = tw * bgImg.naturalHeight / bgImg.naturalWidth;
+            for (var i = Math.floor((x0 - ox) / tw); ox + i * tw < x1; i++)
+               for (var j = Math.floor((y0 - oy) / th); oy + j * th < y1; j++)
+                  sctx.drawImage(bgImg, ox + i * tw, oy + j * th, tw, th);
+         }
+         // page-flip's shadows are divs with a left/right linear-gradient background.
+         function gradientFor(css, w) {
+            var dir = /linear-gradient\(\s*to (left|right)/.exec(css);
+            if (!dir) return null;
+            var g = dir[1] === 'left' ? sctx.createLinearGradient(w, 0, 0, 0) : sctx.createLinearGradient(0, 0, w, 0);
+            var stops = [], re = /(rgba?\([^)]*\))\s*(-?[\d.]+%)?/g, m;
+            while ((m = re.exec(css))) stops.push([m[1], m[2] ? parseFloat(m[2]) / 100 : null]);
+            stops.forEach(function (st, i) {
+               var at = st[1] !== null ? st[1] : stops.length > 1 ? i / (stops.length - 1) : 0;
+               try { g.addColorStop(Math.max(0, Math.min(1, at)), st[0]); } catch (e) {}
+            });
+            return g;
+         }
+         // Redraw the book the way page-flip has it on screen right now, resting pages, a page
+         // being peeked at or turned (page-flip curls it with a CSS rotate + polygon clip-path)
+         // and the shadows, by copying each element's box, transform and clip onto the canvas.
+         var NUM = /-?\d*\.?\d+(?:e[-+]?\d+)?/gi;
+         function drawBook(bx, by) {
+            var els = [].slice.call(block.children).map(function (el, i) {
+               var cs = getComputedStyle(el);
+               return { el: el, cs: cs, z: parseInt(cs.zIndex, 10) || 0, i: i };
+            }).filter(function (o) { return o.cs.display !== 'none' && o.cs.visibility !== 'hidden'; });
+            els.sort(function (p, q) { return p.z - q.z || p.i - q.i; });
+            els.forEach(function (o) {
+               var el = o.el, cs = o.cs, w = parseFloat(cs.width) || 0, h = parseFloat(cs.height) || 0;
+               if (!w || !h) return;
+               var isPage = el.classList.contains('page');
+               var grad = isPage ? null : gradientFor(cs.backgroundImage, w);
+               if (!isPage && !grad) return;
+               var org = (cs.transformOrigin || '0 0').split(' ').map(parseFloat), ox = org[0] || 0, oy = org[1] || 0;
+               sctx.save();
+               sctx.translate(bx + (parseFloat(cs.left) || 0) + ox, by + (parseFloat(cs.top) || 0) + oy);
+               if (cs.transform && cs.transform !== 'none') {
+                  var m = new DOMMatrix(cs.transform);
+                  sctx.transform(m.m11, m.m12, m.m21, m.m22, m.m41, m.m42);
+               }
+               sctx.translate(-ox, -oy);
+               sctx.beginPath();
+               var cp = cs.clipPath || cs.webkitClipPath || '';
+               var pts = cp.indexOf('polygon') === 0 ? cp.slice(cp.indexOf('(')).match(NUM) || [] : [];
+               if (pts.length >= 6) {
+                  for (var j = 0; j + 1 < pts.length; j += 2) sctx.lineTo(+pts[j], +pts[j + 1]);
+                  sctx.closePath();
+               } else sctx.rect(0, 0, w, h);
+               sctx.clip();
+               if (!isPage) {
+                  sctx.fillStyle = grad;
+                  sctx.fillRect(0, 0, w, h);
+               } else if (el.querySelector('.bg')) {   // a filler: the background, lined up as on screen
+                  sctx.fillStyle = '#000';
+                  sctx.fillRect(0, 0, w, h);
+                  var at = (el.querySelector('.bg').style.backgroundPosition || '0 0').match(NUM) || [0, 0];
+                  sctx.beginPath(); sctx.rect(0, 0, w, h); sctx.clip();
+                  tiles(+at[0], +at[1], 0, 0, w, h);
+               } else {   // the page picture, then its crayon and pencil layers
+                  sctx.fillStyle = '#fff';
+                  sctx.fillRect(0, 0, w, h);
+                  [].forEach.call(el.querySelectorAll('img'), function (im) {
+                     if (im.getAttribute('src') && im.complete && im.naturalWidth && im.style.visibility !== 'hidden')
+                        sctx.drawImage(im, 0, 0, w, h);
+                  });
+               }
+               sctx.restore();
+            });
+         }
+
+         // Paint what's under the lens (pages, ink, strokes in progress) into src, at MAG x screen
+         // resolution, then bend it onto the lens.
+         function renderLens() {
+            var dprNow = window.devicePixelRatio || 1;
+            var R = lens.R * lens.s, Rs = R * SRC_PAD, k = Math.min(dprNow * MAG, 2048 / (2 * Rs));
+            var S = Math.ceil(2 * Rs * k), x0 = lens.x - Rs, y0 = lens.y - Rs, W = 2 * Rs;
+            if (src.width !== S) src.width = src.height = S;
+            sctx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+            sctx.globalAlpha = 1;
+            sctx.fillStyle = '#7f7765';
+            sctx.fillRect(x0, y0, W, W);
+            // the page background: 600px tiles, centred, from the top
+            tiles((document.documentElement.clientWidth - 600) / 2, 0, x0, y0, x0 + W, y0 + W);
+            var b = canvasRect;
+            drawBook(b.left, b.top);
+            sctx.globalAlpha = 0.85;   // same as the #pending / #draw opacity
+            sctx.drawImage(pend, b.left, b.top, b.width, b.height);
+            if (stroke) {   // the wet stroke, with its grain (on screen that's a CSS mask)
+               var tw2 = Math.ceil(W * dpr), rx = (x0 - b.left) * dpr, ry = (y0 - b.top) * dpr;
+               if (tmp.width !== tw2) tmp.width = tmp.height = tw2;
+               tctx.setTransform(1, 0, 0, 1, 0, 0);
+               tctx.globalCompositeOperation = 'source-over';
+               tctx.clearRect(0, 0, tw2, tw2);
+               tctx.drawImage(draw, -rx, -ry);
+               tctx.globalCompositeOperation = 'destination-in';
+               tctx.setTransform(1, 0, 0, 1, -rx, -ry);   // grain lines up with the draw canvas, as in bake()
+               tctx.fillStyle = stroke.grain.pattern;
+               tctx.fillRect(rx, ry, tw2, tw2);
+               tctx.globalCompositeOperation = 'source-over';
+               sctx.drawImage(tmp, x0, y0, tw2 / dpr, tw2 / dpr);
+            }
+            sctx.globalAlpha = 1;
+            sctx.drawImage(ers, b.left, b.top, b.width, b.height);
+
+            if (gl) {
+               gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+               gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            } else {
+               var P = lensCv.width, c = S / 2, h = R / MAG * k;
+               lctx.setTransform(1, 0, 0, 1, 0, 0);
+               lctx.clearRect(0, 0, P, P);
+               lctx.save();
+               lctx.beginPath(); lctx.arc(P / 2, P / 2, P / 2, 0, Math.PI * 2); lctx.clip();
+               lctx.drawImage(src, c - h, c - h, 2 * h, 2 * h, 0, 0, P, P);
+               lctx.restore();
+            }
+         }
+         // Redraw only when something under the lens changed, and every frame while a stroke is
+         // going or a page is being peeked at or turned.
+         var lensKey = '', lensBump = 0, lensHot = 0;
+         [].concat(imgs, inkImgs.crayon, inkImgs.pencil).forEach(function (im) {
+            im.addEventListener('load', function () { lensBump++; });
+         });
+         bgImg.onload = function () { lensBump++; };
+         (function lensLoop() {
+            requestAnimationFrame(lensLoop);
+            if (!lens.out || !canvasRect) return;
+            if (stroke || erase) lensHot = 30;   // and keep going a moment after, while ink settles
+            if (flipState !== 'read') lensHot = Math.max(lensHot, 3);
+            var key = [lens.x, lens.y, lens.R, lens.s, lastLayout, flip.getCurrentPageIndex(), lensBump, strokeGen, committedGen].join();
+            if (key === lensKey && lensHot <= 0) return;
+            if (lensHot > 0) lensHot--;
+            lensKey = key;
+            renderLens();
+         })();
+
+         // Start in the hand (the last spot it was out at is remembered, in this browser).
+         if (desktop) {
+            loupe.classList.add('out');
+            handOpen.style.display = handFist.style.display = 'block';
+            sizeLens();
+            placeHand();
+            var at = null;
+            try { at = JSON.parse(localStorage.getItem('uncle-glass')); } catch (e) {}
+            if (at && at.x >= 0 && at.x <= 1 && at.y >= 0 && at.y <= 1) spot = { x: at.x, y: at.y };
+            var p0 = heldPose();   // always starts in the hand; a click takes it out to the last spot
+            lens.x = p0.x; lens.y = p0.y; lens.s = p0.s; lens.a = p0.a;
+            applyLens();
+            showHand();
+         }
+
+         // Grabbing it. Without a crayon the whole glass is a handle; with one, only the rim,
+         // handle and fist are (the middle lets your strokes through, see the CSS). Taking it out
+         // of the hand opens the hand and grows the glass under the pointer; letting go of it
+         // over the open hand puts it back, and the hand closes on it. A quick click (no drag,
+         // not held down) sends it back to the hand, or from the hand back to where it was.
+         var drag = null, ptr = { x: 0, y: 0 };
+         function isGlass(el) { return el && el.nodeType === 1 && (loupe.contains(el) || el === handFist); }
+         function grab(e) {
+            if (!lens.out || drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.target.setPointerCapture(e.pointerId);
+            ptr = { x: e.clientX, y: e.clientY };
+            var click = { t0: performance.now(), sx: e.clientX, sy: e.clientY, moved: false, wasHeld: lens.held };
+            if (lens.held) {
+               lens.held = false;
+               showHand();
+               drag = { id: e.pointerId, nx: 0, ny: 0, over: false, click: click };
+               animateTo(function () { return { x: ptr.x, y: ptr.y, s: 1, a: OUT_A }; }, 300);
+            } else {
+               var r0 = lens.R * lens.s;   // where on the glass it was grabbed, as a fraction of its size
+               drag = { id: e.pointerId, nx: (lens.x - e.clientX) / r0, ny: (lens.y - e.clientY) / r0, over: false, click: click };
+               save();   // remember where it was picked up from, in case it goes back to the hand
+            }
+            loupe.classList.add('dragging');
+         }
+         loupe.addEventListener('pointerdown', grab);
+         handFist.addEventListener('pointerdown', grab);
+         handFist.addEventListener('dragstart', function (e) { e.preventDefault(); });
+         window.addEventListener('pointermove', function (e) {
+            if (!drag || e.pointerId !== drag.id) return;
+            ptr = { x: e.clientX, y: e.clientY };
+            var c = drag.click;
+            if (Math.abs(ptr.x - c.sx) + Math.abs(ptr.y - c.sy) > 6) c.moved = true;
+            drag.over = overHand(ptr.x, ptr.y);
+            handOpen.classList.toggle('ready', drag.over);
+         });
+         function letGo(e) {
+            if (!drag || e.pointerId !== drag.id) return;
+            var over = drag.over, c = drag.click;
+            var clicked = e.type === 'pointerup' && !c.moved && performance.now() - c.t0 < 300;
+            drag = null;
+            loupe.classList.remove('dragging');
+            handOpen.classList.remove('ready');
+            if (clicked && c.wasHeld) {   // click on the hand: out to where it was last time
+               animateTo(spotPose(), 320, save);
+            } else if (clicked || over) {
+               goHome();
+            } else if (tween) {   // still coming out of the hand
+               tween.done = save;
+            } else {   // let go somewhere else: back to full size, where it is
+               animateTo({ x: lens.x, y: lens.y, s: 1, a: OUT_A }, 180, save);
+            }
+         }
+         window.addEventListener('pointerup', letGo);
+         window.addEventListener('pointercancel', letGo);
+         // Keep page-flip out of moving the glass (no corner peeks or turns from that), but let
+         // it see the pointer passing over the glass otherwise, so a corner can still be peeked
+         // at or a page dragged across under the glass.
+         ['mousedown', 'mousemove', 'mouseup', 'touchstart', 'touchmove', 'touchend'].forEach(function (t) {
+            var starts = t === 'mousedown' || t === 'touchstart';
+            window.addEventListener(t, function (e) {
+               if (drag || (starts && isGlass(e.target))) e.stopPropagation();
+            }, true);
          });
       }
       </script>

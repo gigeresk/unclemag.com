@@ -12,9 +12,7 @@
       <title>Uncle Magazine</title>
       <link rel="icon" type="image/x-icon" href="images/favicon-groucho.png">
       <style type="text/css">html{min-height:100%;padding:0 max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));
-         background:#7f7765}
-         html::before{content:"";position:fixed;top:0;left:0;right:0;height:100vh;z-index:-1;
-         background:url("images/magic-eye-bg.webp") center top/600px auto repeat}
+         background:#7f7765 url("images/magic-eye-bg.webp") center top/600px auto repeat}
          body{margin:40px auto;max-width:650px;line-height:1.6;font-size:18px;color:#444;
          padding:20px 30px;color:#fff;font-weight:bold;
          text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,
@@ -27,8 +25,14 @@
       <style type="text/css">
          .tg  {border-collapse:collapse;border-spacing:1;width:100%;}
          .tg td{border-color:transparent;border-style:solid;border-width:1px;font-size:18px;
-         overflow:hidden;padding:10px 5px;word-break:normal;text-align:center;vertical-align:top;width:33.33%;}
-         .tg img{max-width:100%;height:auto;display:block;margin:0 auto 8px;}
+         padding:10px 5px;word-break:normal;text-align:center;vertical-align:top;width:33.33%;}
+         .tg a{display:block;position:relative;width:fit-content;max-width:100%;margin:0 auto 8px;
+         transition:transform .2s}
+         .tg img{max-width:100%;height:auto;display:block}
+         /* Hover: lifts a little, with a white line just inside the cover edge and a black one just outside it. */
+         .tg a:hover,.tg a:focus-visible{transform:translateY(-4%);outline:none}
+         .tg a:hover:after,.tg a:focus-visible:after{content:"";position:absolute;inset:0;
+         border:1.5px solid #fff;outline:1px solid #000;pointer-events:none}
       </style>
       <table class="tg">
          <tbody>
