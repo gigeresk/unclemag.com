@@ -18,7 +18,22 @@
          text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,
          0 -2px 0 #000,0 2px 0 #000,-2px 0 0 #000,2px 0 0 #000,0 0 8px #000}
          a{color:#fff}h1,h2,h3{line-height:1.2}
+         /* Phones and tablets: a strip of background above and below the page, scrolled just past on
+            load (see the script below). */
+         html.bleed{padding-top:100px;padding-bottom:160px;background-position:center 100px}
       </style>
+      <script>
+         // Phones and tablets: while a page is scrolled right to the top, Safari fills its top and
+         // bottom bars with the flat background colour (grey) instead of the pattern. Once the page
+         // is scrolled it shows the page behind them, so start a little way into a strip of extra
+         // background (html.bleed) above the content.
+         if (!matchMedia('(hover: hover) and (pointer: fine)').matches) {
+            document.documentElement.classList.add('bleed');
+            addEventListener('DOMContentLoaded', function () {
+               if (!scrollY && !location.hash) scrollTo(0, 100);
+            });
+         }
+      </script>
    </head>
    <body>
       <p><a href="mailto:editor@unclemag.com">editor@unclemag.com</a> &nbsp;&middot;&nbsp; <strong>Store (archived): </strong><a href="https://web.archive.org/web/20250524203948/https://ssynse.com/">ssynse.com</a> &nbsp;&middot;&nbsp; <a href="about.html">About</a></p>

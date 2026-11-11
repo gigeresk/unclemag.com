@@ -5,6 +5,15 @@
       <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
       <title>Uncle Magazine</title>
       <link rel="icon" type="image/x-icon" href="images/favicon-groucho.png">
+      <script>
+         // Phones and tablets: a strip of background above and below the reader, which the page is
+         // kept scrolled just into (see BLEED below). Tablets (touch, no mouse, a big screen) also
+         // use the magnifying glass instead of pinch-zoom.
+         if (!matchMedia('(hover: hover) and (pointer: fine)').matches) {
+            document.documentElement.classList.add('bleed');
+            if (Math.min(screen.width, screen.height) >= 600) document.documentElement.classList.add('tablet');
+         }
+      </script>
       <style type="text/css">
          html,body{height:100%;margin:0;overscroll-behavior:none}
          html{background:#7f7765 url("images/magic-eye-bg.webp") center top/600px auto repeat}
@@ -44,17 +53,19 @@
          /* Crayons */
          .page .ink{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
          .page .ink:not([src]){display:none}
-         #draw,#pending{position:fixed;left:0;top:0;opacity:.85;pointer-events:none}
+         /* The drawing layers and the crayons are placed on the page (absolute, not fixed), so when
+            a phone zooms in they zoom and pan along with the magazine instead of floating over it. */
+         #draw,#pending{position:absolute;left:0;top:0;opacity:.85;pointer-events:none}
          /* One finger draws; two fingers still zoom and pan the page (phones). */
          #draw{display:none;touch-action:pinch-zoom;z-index:20}
          #pending{z-index:19}
-         #erasing{position:fixed;left:0;top:0;z-index:18;pointer-events:none}
+         #erasing{position:absolute;left:0;top:0;z-index:18;pointer-events:none}
          body.writing #draw{display:block;pointer-events:auto}
          /* Crayon size: as big as --chmax, but small enough that the whole column fits the screen
             height (3 crayons + a pencil 1.6x as tall + 3 gaps + a little margin). */
          :root{--chmax:96px;--ch:min(var(--chmax),calc((100vh - 40px) / 4.6))}
          @supports (height:100dvh){:root{--ch:min(var(--chmax),calc((100dvh - 40px) / 4.6))}}
-         #crayons{position:fixed;left:-999px;top:0;z-index:21;display:flex;flex-direction:column;
+         #crayons{position:absolute;left:-999px;top:0;z-index:21;display:flex;flex-direction:column;
          gap:10px;visibility:hidden}
          .crayon{display:block;width:40px;height:var(--ch);padding:0 9px;margin:0;border:0;background:none;
          cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .28s cubic-bezier(.34,1.56,.64,1);
@@ -67,7 +78,7 @@
          .flying{position:fixed;left:0;top:0;z-index:30;pointer-events:none;transform-origin:50% 50%;
          filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
          .flying svg,.flying img{display:block;width:100%;height:100%}
-         /* Magnifying glass (desktop only). It starts small, held in a fist at the left, halfway up;
+         /* Magnifying glass (computers and tablets). It starts small, held in a fist at the left, halfway up;
             pull it out and it grows, drop it back on the (open) hand to put it away. */
          #loupe{position:fixed;left:0;top:0;z-index:22;display:none;pointer-events:none;touch-action:none;
          -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -91,13 +102,27 @@
             .crayon{width:56px;padding:0 12px}
             #stage{padding-right:calc(88px + env(safe-area-inset-right));padding-left:calc(112px + env(safe-area-inset-left))}
          }
+         /* Phones and tablets: while a page is scrolled right to the top, Safari fills its top and
+            bottom bars with the flat background colour (grey), not the pattern. Scrolled, it shows
+            the page behind them. So there's a strip of background above and below the reader and
+            the page is kept scrolled to the reader (the script's BLEED), with the pattern lined up
+            to start at the top of the screen as before. Only the browser scrolls it, not fingers. */
+         html.bleed{padding:100px 0 160px;overflow-y:scroll;scrollbar-width:none;background-position:center 100px}
+         html.bleed::-webkit-scrollbar{display:none}
+         html.bleed body{overflow:clip;touch-action:pinch-zoom}
+         html.bleed.zoomed body{touch-action:auto}
+         html.bleed #status{top:calc(50% + 100px)}
+         /* Tablet: room on the left for the hand holding the glass, and no pinch-zoom anywhere. */
+         html.tablet #stage{padding-left:calc(112px + env(safe-area-inset-left))}
+         html.tablet,html.tablet body,html.tablet #stage,html.tablet #book,html.tablet #draw,html.tablet .hand{touch-action:none}
          @media (max-width:600px){:root{--chmax:76px}.crayon{width:34px;padding:0 7px}.crayon svg{width:20px}}
          /* Phone on its side: put Back/PDF in the left margin so the book gets the full height. */
          @media (orientation:landscape) and (max-height:500px){
-            .bar{position:fixed;top:0;left:0;z-index:5;flex-direction:column;align-items:flex-start;gap:8px;
+            .bar{position:absolute;top:0;left:0;z-index:5;flex-direction:column;align-items:flex-start;gap:8px;
             padding:max(8px,env(safe-area-inset-top)) 8px 8px max(10px,env(safe-area-inset-left))}
             #stage{padding-top:max(8px,env(safe-area-inset-top));padding-bottom:max(8px,env(safe-area-inset-bottom));
             padding-left:calc(84px + env(safe-area-inset-left))}
+            html.bleed .bar{top:100px}
          }
       </style>
    </head>
@@ -147,7 +172,25 @@
 
       <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
       <script>
+      // Where the background pattern's tiles start on screen (600px wide, centred, from the top of
+      // the screen once the page sits at its usual scroll).
+      var bgTop = parseFloat(getComputedStyle(document.documentElement).paddingTop) || 0;
+      function bgOrigin() {
+         var r = document.documentElement.getBoundingClientRect();
+         return { x: r.left + (r.width - 600) / 2, y: r.top + bgTop };
+      }
       (async function () {
+         // Phones and tablets: keep the page scrolled just past the strip above it (html.bleed), so
+         // Safari shows the pattern behind its toolbars. Left alone while zoomed in.
+         var BLEED = document.documentElement.classList.contains('bleed') ? bgTop : 0;
+         function settle() {
+            if (BLEED && !zoomed() && Math.abs(window.scrollY - BLEED) > 0.5) window.scrollTo(0, BLEED);
+         }
+         if (BLEED) {
+            if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+            settle();
+            ['scroll', 'resize', 'pageshow', 'load'].forEach(function (t) { window.addEventListener(t, settle, { passive: true }); });
+         }
          var status = document.getElementById('status');
          var stage = document.getElementById('stage');
          var frame = document.getElementById('frame');
@@ -227,8 +270,11 @@
          // Size the book so a spread (or single page on narrow screens) fits the viewport.
          // Two pages when each is still a decent size (desktop), or when they come out nearly as
          // big as one page alone would (a phone on its side, where height is what limits them).
-         var frameW = 0, spread = true;
+         var frameW = 0, spread = true, refit = false;
          function fit() {
+            // Zoomed in on a phone, Safari's toolbars come and go as you pan, which fires resizes.
+            // Leave the book alone until you zoom back out, or it shifts about under your fingers.
+            if (frameW && zoomed()) { refit = true; return; }
             var cs = getComputedStyle(stage);   // padding leaves room for the crayons on the right
             var aw = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
             var ah = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
@@ -260,12 +306,10 @@
          status.style.display = 'none';
          frame.style.visibility = 'visible';
 
-         // Line the fillers' pattern up with the page background (600px tiles, centred horizontally, from the top of the screen).
-         var TILE_W = 600;
+         // Line the fillers' pattern up with the page background.
          // Checked every frame (cheap) so it stays put through flips, resizes and re-layouts.
          (function alignFillers() {
-            var ox = (document.documentElement.clientWidth - TILE_W) / 2;
-            var oy = 0;
+            var o = bgOrigin(), ox = o.x, oy = o.y;
             fillerBgs.forEach(function (bg) {
                var r = bg.getBoundingClientRect();
                var pos = (ox - Math.round(r.left)) + 'px ' + (oy - Math.round(r.top)) + 'px';
@@ -368,7 +412,19 @@
          function zoomed() { return !!window.visualViewport && window.visualViewport.scale > 1.01; }
          if (window.visualViewport) window.visualViewport.addEventListener('resize', function () {
             document.documentElement.classList.toggle('zoomed', zoomed());
+            if (refit && !zoomed()) { refit = false; window.dispatchEvent(new Event('resize')); }   // catch up (fit, then page-flip)
+            settle();
          });
+         // Tablets don't pinch-zoom at all (the magnifying glass does that job). touch-action:none
+         // covers most of it; Safari also needs its own gesture events and two-finger moves stopped.
+         if (document.documentElement.classList.contains('tablet')) {
+            ['gesturestart', 'gesturechange'].forEach(function (t) {
+               document.addEventListener(t, function (e) { e.preventDefault(); }, { passive: false });
+            });
+            document.addEventListener('touchmove', function (e) {
+               if (e.touches.length > 1 && e.cancelable) e.preventDefault();
+            }, { passive: false });
+         }
          ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function (t) {
             window.addEventListener(t, function (e) {
                if (document.body.classList.contains('writing')) return;   // crayons handle their own touches
@@ -480,9 +536,13 @@
             return out.filter(function (s) { return s.page >= 1 && s.page <= n; });
          }
 
-         // Keep the canvases over the book and the crayons just right of it.
-         var lastLayout = '';
+         // Keep the canvases over the book and the crayons just right of it. They're positioned on
+         // the page (absolute), so while a phone is zoomed in they already move with the book and
+         // are left where they are (screen measurements then describe the zoomed view, not the page).
+         var lastLayout = '', root = document.documentElement;
          (function layout() {
+            requestAnimationFrame(layout);
+            if (root.classList.contains('zoomed')) return;
             var b = block.getBoundingClientRect(), r = flip.getBoundsRect();
             var key = [b.left, b.top, b.width, b.height, r.left, r.pageWidth, r.height, window.devicePixelRatio].join();
             if (key !== lastLayout && b.width > 0) {
@@ -490,18 +550,18 @@
                lastLayout = key;
                dpr = window.devicePixelRatio || 1;
                canvasRect = b;
+               var sx = window.scrollX || 0, sy = window.scrollY || 0;   // screen -> page (normally 0)
                [draw, pend, ers].forEach(function (c) {
-                  c.style.left = b.left + 'px'; c.style.top = b.top + 'px';
+                  c.style.left = b.left + sx + 'px'; c.style.top = b.top + sy + 'px';
                   c.style.width = b.width + 'px'; c.style.height = b.height + 'px';
                   c.width = Math.round(b.width * dpr); c.height = Math.round(b.height * dpr);
                });
                setMask();
-               var bw = box.offsetWidth, bh = box.offsetHeight;
-               box.style.left = Math.min(window.innerWidth - bw - 4, b.left + r.left + 2 * r.pageWidth + 6) + 'px';
-               box.style.top = Math.max(4, Math.min(window.innerHeight - bh - 4, b.top + r.top + r.height / 2 - bh / 2)) + 'px';
+               var bw = box.offsetWidth, bh = box.offsetHeight, vw = root.clientWidth, vh = root.clientHeight;
+               box.style.left = Math.min(vw - bw - 4, b.left + r.left + 2 * r.pageWidth + 6) + sx + 'px';
+               box.style.top = Math.max(4, Math.min(vh - bh - 4, b.top + r.top + r.height / 2 - bh / 2)) + sy + 'px';
                box.style.visibility = 'visible';
             }
-            requestAnimationFrame(layout);
          })();
 
          // ---- picking crayons
@@ -524,6 +584,7 @@
          // Desktop: the picked-up crayon leaves the box and becomes the cursor.
          // Phone: it stays in the box, tilted, as an on/off toggle.
          var desktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+         var glass = desktop || root.classList.contains('tablet');   // the magnifying glass: computers and tablets
          var lastX = -1, lastY = -1;
          document.addEventListener('pointermove', function (e) { lastX = e.clientX; lastY = e.clientY; }, { passive: true });
          buttons.forEach(function (b) { if (b.dataset.cursor) new Image().src = b.dataset.cursor; });
@@ -619,7 +680,8 @@
          // Clicking/tapping anywhere that isn't a page drops the crayon (it zips back).
          function onPage(x, y) {
             if (!canvasRect) return false;
-            x -= canvasRect.left; y -= canvasRect.top;
+            var o = drawOrigin();
+            x -= o.x; y -= o.y;
             return slots().some(function (s) { return x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h; });
          }
          document.addEventListener('pointerdown', function (e) {
@@ -630,8 +692,11 @@
 
          // ---- drawing
          var stroke = null;   // {id, pts: queued points, last, prev, bbox}
-         var raf = 0;
-         function pos(e) { return { x: e.clientX - canvasRect.left, y: e.clientY - canvasRect.top }; }
+         var raf = 0, org = { x: 0, y: 0 };
+         // Where the draw canvas is on screen right now (it moves when a phone is zoomed in), taken
+         // at the start of each stroke; pos() gives points on the canvas.
+         function drawOrigin() { var d = draw.getBoundingClientRect(); return { x: d.left, y: d.top }; }
+         function pos(e) { return { x: e.clientX - org.x, y: e.clientY - org.y }; }
 
          draw.addEventListener('contextmenu', function (e) { if (color) e.preventDefault(); });
          draw.addEventListener('pointerdown', function (e) {
@@ -643,6 +708,7 @@
             if (!sl.length) return;
             e.preventDefault();
             draw.setPointerCapture(e.pointerId);
+            org = drawOrigin();
             var p = pos(e);
             var pencil = color === PENCIL;
             var width = pencil ? Math.max(1.4, sl[0].w * 0.003) : Math.max(3, sl[0].w * 0.014);
@@ -720,6 +786,7 @@
             draw.style.cursor = own.dataset.bigEraserCursor
                ? 'url("' + own.dataset.bigEraserCursor + '") ' + own.dataset.bigEraserHotspot + ', crosshair'
                : 'url("' + own.dataset.eraserCursor + '") ' + own.dataset.eraserHotspot + ', crosshair';
+            org = drawOrigin();
             var p = pos(e);
             erase = { id: e.pointerId, slots: sl, last: p, pts: [p], width: Math.max(8, sl[0].w * 0.02) };
             // Show the visible pencil layers on the overlay while they're being rubbed out.
@@ -912,7 +979,7 @@
             });
          });
 
-         // ---- magnifying glass (desktop only; phones pinch-zoom instead)
+         // ---- magnifying glass (computers and tablets; phones pinch-zoom instead)
          // It starts small in a fist at the left, halfway up. Pull it out (the hand opens, the glass
          // grows), drag it about (by the rim or handle while a crayon is out, so you can draw
          // through it: strokes land under the pointer, on the page beneath the glass). The lens
@@ -921,7 +988,7 @@
          // fringing, so the view meets the page outside without a seam.
          var loupe = document.getElementById('loupe'), lensCv = loupe.querySelector('canvas');
          var MAG = 2, FRINGE = 0.012, SRC_PAD = 1.04;   // src covers a little past the rim, for the fringing
-         var lens = { out: desktop, held: true, x: 0, y: 0, R: 80, s: 1, a: 45 };   // s: scale, a: handle angle
+         var lens = { out: glass, held: true, x: 0, y: 0, R: 80, s: 1, a: 45 };   // s: scale, a: handle angle
          var arm = document.getElementById('lensArm');
          var handOpen = document.getElementById('handOpen'), handFist = document.getElementById('handFist');
          var src = document.createElement('canvas'), sctx = src.getContext('2d');
@@ -930,7 +997,7 @@
          bgImg.src = 'images/magic-eye-bg.webp';
 
          var gl = null, glOK = false;
-         if (desktop) try { gl = lensCv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false }); } catch (e) {}
+         if (glass) try { gl = lensCv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false }); } catch (e) {}
          if (gl) {
             var vs = 'attribute vec2 a; varying vec2 p; void main(){ p = a; gl_Position = vec4(a, 0., 1.); }';
             var fs = [
@@ -976,7 +1043,7 @@
             }
          }
          if (!glOK) gl = null;
-         var lctx = gl || !desktop ? null : lensCv.getContext('2d');   // no WebGL: a plain 2x circle
+         var lctx = gl || !glass ? null : lensCv.getContext('2d');   // no WebGL: a plain 2x circle
 
          function sizeLens() {
             var D = Math.round(Math.max(220, Math.min(360, 0.42 * Math.min(window.innerWidth, window.innerHeight))));
@@ -1049,7 +1116,7 @@
                else handFist.style.pointerEvents = '';
             })(0);
          }
-         if (desktop) setTimeout(beckon, 10000 + Math.random() * 10000);
+         if (glass) setTimeout(beckon, 10000 + Math.random() * 10000);
          function overHand(x, y) {
             var r = handOpen.getBoundingClientRect(), m = 24;
             return x > r.left - m && x < r.right + m && y > r.top - m && y < r.bottom + m;
@@ -1188,8 +1255,9 @@
             sctx.globalAlpha = 1;
             sctx.fillStyle = '#7f7765';
             sctx.fillRect(x0, y0, W, W);
-            // the page background: 600px tiles, centred, from the top
-            tiles((document.documentElement.clientWidth - 600) / 2, 0, x0, y0, x0 + W, y0 + W);
+            // the page background
+            var bo = bgOrigin();
+            tiles(bo.x, bo.y, x0, y0, x0 + W, y0 + W);
             var b = canvasRect;
             drawBook(b.left, b.top);
             sctx.globalAlpha = 0.85;   // same as the #pending / #draw opacity
@@ -1244,7 +1312,7 @@
          })();
 
          // Start in the hand (the last spot it was out at is remembered, in this browser).
-         if (desktop) {
+         if (glass) {
             loupe.classList.add('out');
             handOpen.style.display = handFist.style.display = 'block';
             sizeLens();
