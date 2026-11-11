@@ -35,6 +35,11 @@
          .page img{width:100%;height:100%;display:block;object-fit:contain}
          .page.filler{background:#000}
          .filler .bg{width:100%;height:100%;background:url("images/magic-eye-bg.webp") 0 0/600px auto repeat}
+         /* Turning onto a cover, page-flip draws the empty filler side over the page still lying
+            there, but a pixel short of its outer edges, so a white hairline of that page leaks out.
+            Trim those edges while it happens; the background behind is the same pattern. */
+         .page.filler.--left:not(.--simple) ~ .page.--left.--simple{clip-path:inset(1px 0 1px 1px)}
+         .page.--right.--simple:has(~ .page.filler.--right:not(.--simple)){clip-path:inset(1px 1px 1px 0)}
          #status{position:absolute;left:0;right:0;top:50%;text-align:center}
          /* Crayons */
          .page .ink{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
@@ -314,8 +319,11 @@
          ['pointerdown', 'keydown', 'touchend'].forEach(function (t) {
             window.addEventListener(t, unlockAudio, { capture: true, passive: true });
          });
+         var lastSound = 0;
          function pageSound() {
             if (!audio || audio.state !== 'running') return;
+            if (Date.now() - lastSound < 300) return;   // a drag that ends in a swipe is still one turn
+            lastSound = Date.now();
             var now = audio.currentTime, k = 0.85 + Math.random() * 0.3;
             if (audio.file) {   // the recorded sound, nudged a little in pitch and loudness
                var f = audio.createBufferSource(), fg = audio.createGain();
@@ -344,10 +352,14 @@
             th.connect(lp); lp.connect(tg); tg.connect(audio.destination);
             th.start(now + 0.3 / k);
          }
-         // Clicks, keys and swipes go through page-flip's "flipping" state; letting go of a page
-         // you're dragging finishes (or drops back) straight from "user_fold".
+         // Clicks, keys and swipes go through page-flip's "flipping" state, which always turns the
+         // page. Letting go of a page you're dragging finishes straight from "user_fold": it turns
+         // if the corner is past the spine (x <= 0, the same test page-flip uses), else drops back.
          flip.on('changeState', function (e) { if (e.data === 'flipping') pageSound(); });
-         window.addEventListener('pointerup', function () { if (flip.getState() === 'user_fold') pageSound(); }, true);
+         window.addEventListener('pointerup', function () {
+            var calc = flip.getFlipController().getCalculation();
+            if (flip.getState() === 'user_fold' && calc && calc.getPosition().x <= 0) pageSound();
+         }, true);
 
          // Pinch to zoom (when no crayon is out). page-flip reads any touch on the book as the
          // start of a page turn, so two-finger gestures, and every touch while zoomed in, are kept
@@ -381,6 +393,14 @@
             if (dir === 0 && last >= n) return false;
             if (dir === 1 && first <= 1) return false;
             return pageExists(dir);
+         };
+         // page-flip enters "user_fold" before it checks there's a page to drag, and when there
+         // isn't (dragging back from the cover) it never leaves it, so the next click anywhere
+         // looked like the end of a drag. Only fold when a page can actually be picked up.
+         var fold = fc.fold.bind(fc);
+         fc.fold = function (pos) {
+            if (!fc.getCalculation() && !fc.start(pos)) return;
+            fold(pos);
          };
          document.addEventListener('keydown', function (e) {
             if (document.body.classList.contains('writing')) return;   // no page turning with a crayon
