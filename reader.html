@@ -93,7 +93,8 @@
          #loupe.dragging canvas,#loupe.dragging .grip{cursor:grabbing}
          .hand{position:fixed;left:0;top:0;display:none;visibility:hidden;pointer-events:none;
          -webkit-user-drag:none;user-select:none;filter:drop-shadow(0 4px 6px rgba(0,0,0,.45))}
-         #handOpen{z-index:21;transform-origin:50% 100%;transition:transform .15s}   /* under the glass */
+         #handOpen{z-index:21;transform-origin:50% 100%;transition:transform .15s;   /* under the glass */
+         pointer-events:auto;cursor:pointer}   /* click the empty hand: the glass comes back to it */
          #handOpen.ready{transform:scale(1.07)}   /* "drop it here" */
          #handFist{z-index:23;pointer-events:auto;cursor:grab}   /* over the handle it grips */
          /* Desktop: bigger crayons (they're thin, so they need the size to be seen). */
@@ -116,6 +117,23 @@
          html.tablet #stage{padding-left:calc(112px + env(safe-area-inset-left))}
          html.tablet,html.tablet body,html.tablet #stage,html.tablet #book,html.tablet #draw,html.tablet .hand{touch-action:none}
          @media (max-width:600px){:root{--chmax:76px}.crayon{width:34px;padding:0 7px}.crayon svg{width:20px}}
+         /* Print button, like the old point-and-click games: a little printer that opens the PDF.
+            Computers and tablets: in the bottom of the left margin, under the hand. Phones: in the
+            bar beside Back. The paper feeds out a little on hover. */
+         #print{display:inline-flex;align-items:center;gap:6px;margin-right:auto;text-decoration:none;
+         -webkit-tap-highlight-color:transparent}
+         #print[hidden]{display:none}
+         /* Pixel art (tools/make_printer.py): back, paper and front layers, the paper rising on hover.
+            Shown at 1:1 on computers (crisp at 2x too) and a third of that on phones. */
+         #print .printer{display:block;width:32px;height:29.33px;--lift:-1.5px;image-rendering:pixelated;
+         background:url("images/printer-front.png") 0 0/100% 100% no-repeat,url("images/printer-paper.png") 0 0/100% 100% no-repeat,
+         url("images/printer-back.png") 0 0/100% 100% no-repeat;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));
+         transition:background-position .25s cubic-bezier(.34,1.56,.64,1)}
+         #print:hover .printer,#print:focus-visible .printer{background-position:0 0,0 var(--lift),0 0}
+         #print:active .printer{transform:translateY(1px)}
+         html:not(.bleed) #print,html.tablet #print{position:fixed;z-index:4;flex-direction:column;gap:0;
+         left:max(14px,env(safe-area-inset-left));bottom:max(12px,env(safe-area-inset-bottom))}
+         html:not(.bleed) #print .printer,html.tablet #print .printer{width:96px;height:88px;--lift:-4px}
          /* Phone on its side: put Back/PDF in the left margin so the book gets the full height. */
          @media (orientation:landscape) and (max-height:500px){
             .bar{position:absolute;top:0;left:0;z-index:5;flex-direction:column;align-items:flex-start;gap:8px;
@@ -129,6 +147,9 @@
    <body>
       <div class="bar">
          <a href="./">&larr; Back</a>
+         <a id="print" href="#" target="_blank" rel="noopener" title="Print (opens the PDF)" aria-label="Print" hidden>
+            <span class="printer" aria-hidden="true"></span>
+         </a>
          <a id="dl" href="#" download hidden>PDF</a>
       </div>
       <div id="stage"><div id="frame"><div id="book"></div></div></div>
@@ -210,6 +231,9 @@
             return;
          }
          document.title = info.title;
+         var printBtn = document.getElementById('print');
+         printBtn.href = info.pdf;
+         printBtn.hidden = false;
          // The PDF link only shows if the flipbook can't open.
          function fallBack() {
             var dl = document.getElementById('dl');
@@ -1332,7 +1356,7 @@
          // over the open hand puts it back, and the hand closes on it. A quick click (no drag,
          // not held down) sends it back to the hand, or from the hand back to where it was.
          var drag = null, ptr = { x: 0, y: 0 };
-         function isGlass(el) { return el && el.nodeType === 1 && (loupe.contains(el) || el === handFist); }
+         function isGlass(el) { return el && el.nodeType === 1 && (loupe.contains(el) || el === handFist || el === handOpen); }
          function grab(e) {
             if (!lens.out || drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
             e.preventDefault();
@@ -1355,6 +1379,13 @@
          loupe.addEventListener('pointerdown', grab);
          handFist.addEventListener('pointerdown', grab);
          handFist.addEventListener('dragstart', function (e) { e.preventDefault(); });
+         // Clicking the empty hand calls the glass back from wherever it is (remembering that spot).
+         handOpen.addEventListener('dragstart', function (e) { e.preventDefault(); });
+         handOpen.addEventListener('click', function () {
+            if (!lens.out || lens.held || drag) return;
+            save();
+            goHome();
+         });
          window.addEventListener('pointermove', function (e) {
             if (!drag || e.pointerId !== drag.id) return;
             ptr = { x: e.clientX, y: e.clientY };
