@@ -29,7 +29,7 @@
          .bar{display:flex;align-items:center;justify-content:space-between;gap:12px;
          padding:max(10px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));flex:0 0 auto}
          #stage{flex:1 1 0;display:flex;align-items:center;justify-content:center;
-         min-height:0;padding:0 calc(64px + env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+         min-height:0;padding:0 calc(var(--slot) + 16px + env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
          /* At normal size, the book takes one-finger drags (page turns) and the browser only pinches.
             Zoomed in, the browser takes everything so one finger moves you around the page. */
          #stage{touch-action:pinch-zoom}
@@ -38,7 +38,6 @@
             tree) switches pinch-zoom off over the whole book. The id selector beats its class rule. */
          #book{touch-action:pinch-zoom}
          html.zoomed #book{touch-action:auto}
-         @media (max-width:600px){#stage{padding-right:calc(52px + env(safe-area-inset-right))}}
          #frame{margin:0 auto;visibility:hidden}
          .page{background:#fff}
          .page img{width:100%;height:100%;display:block;object-fit:contain}
@@ -61,19 +60,26 @@
          #pending{z-index:19}
          #erasing{position:absolute;left:0;top:0;z-index:18;pointer-events:none}
          body.writing #draw{display:block;pointer-events:auto}
-         /* Crayon size: as big as --chmax, but small enough that the whole column fits the screen
-            height (3 crayons + a pencil 1.6x as tall + 3 gaps + a little margin). */
-         :root{--chmax:96px;--ch:min(var(--chmax),calc((100vh - 40px) / 4.6))}
-         @supports (height:100dvh){:root{--ch:min(var(--chmax),calc((100dvh - 40px) / 4.6))}}
+         /* The crayons and pencil each lie at an angle across a round grey bevelled button, like the
+            inventory slots of 90s CD-ROM games. The button (--slot across) stays when its tool is
+            picked up: an empty slot. As big as --slotmax, but small enough that the column fits the
+            screen height (4 buttons + 3 gaps + a little margin). */
+         :root{--slotmax:52px;--slot:min(var(--slotmax),calc((100vh - 40px) / 4.9))}
+         @supports (height:100dvh){:root{--slot:min(var(--slotmax),calc((100dvh - 40px) / 4.9))}}
          #crayons{position:absolute;left:-999px;top:0;z-index:21;display:flex;flex-direction:column;
-         gap:10px;visibility:hidden}
-         .crayon{display:block;width:40px;height:var(--ch);padding:0 9px;margin:0;border:0;background:none;
-         cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .28s cubic-bezier(.34,1.56,.64,1);
+         gap:calc(var(--slot) * .25);visibility:hidden}
+         .crayon{--a:40deg;position:relative;display:block;width:var(--slot);height:var(--slot);padding:0;margin:0;
+         border:0;border-radius:50%;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;
          filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
-         .crayon svg{display:block;width:22px;height:var(--ch)}
-         .crayon img{display:block;height:var(--ch);width:auto;margin:0 auto}
-         .crayon.tall,.crayon.tall img{height:calc(var(--ch) * 1.6)}
-         .crayon.on{transform:translate(-6px,-10px) rotate(-12deg)}
+         .crayon::before{content:"";position:absolute;inset:0;visibility:visible;
+         background:url("images/slot.png") 0 0/100% 100% no-repeat;image-rendering:pixelated}   /* tools/make_slot.py */
+         .crayon img{position:absolute;left:50%;top:50%;display:block;height:calc(var(--slot) * 1.2);width:auto;
+         transform:translate(-50%,-50%) rotate(var(--a));transition:transform .28s cubic-bezier(.34,1.56,.64,1)}
+         .crayon.tall img{height:calc(var(--slot) * 1.32)}   /* the pencil: a bit longer, but not much past its button */
+         @media (hover:hover){   /* a little lift on hover, with the printer paper's spring */
+            .crayon:hover img{transform:translate(-50%,-50%) translateY(calc(var(--slot) * -.05)) rotate(calc(var(--a) - 4deg))}
+         }
+         .crayon.on img{transform:translate(-50%,-50%) translate(-4px,-8px) rotate(calc(var(--a) - 15deg))}   /* phone: picked */
          .crayon.held{visibility:hidden}   /* desktop: it's in your hand (the cursor) */
          .flying{position:fixed;left:0;top:0;z-index:30;pointer-events:none;transform-origin:50% 50%;
          filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
@@ -93,15 +99,25 @@
          #loupe.dragging canvas,#loupe.dragging .grip{cursor:grabbing}
          .hand{position:fixed;left:0;top:0;display:none;visibility:hidden;pointer-events:none;
          -webkit-user-drag:none;user-select:none;filter:drop-shadow(0 4px 6px rgba(0,0,0,.45))}
-         #handOpen{z-index:21;transform-origin:50% 100%;transition:transform .15s;   /* under the glass */
+         /* Hovering the hand (and the glass in it) lifts it a little, with the printer paper's spring. */
+         .hand,#loupe{transition:translate .25s cubic-bezier(.34,1.56,.64,1)}
+         .hand.lift,#loupe.lift{translate:0 -3px}
+         #handOpen{z-index:21;transform-origin:50% 100%;   /* under the glass */
+         transition:transform .15s,translate .25s cubic-bezier(.34,1.56,.64,1);
          pointer-events:auto;cursor:pointer}   /* click the empty hand: the glass comes back to it */
          #handOpen.ready{transform:scale(1.07)}   /* "drop it here" */
+         body.writing #handOpen{cursor:inherit}   /* holding a crayon: it stays the cursor over the hand */
+         /* Offered a crayon or the pencil: "no thanks", a wag side to side from the wrist. */
+         #handOpen.nope{animation:nope .5s ease-in-out}
+         @keyframes nope{15%{transform:rotate(-10deg)}35%{transform:rotate(9deg)}55%{transform:rotate(-6deg)}
+         75%{transform:rotate(3deg)}to{transform:none}}
          #handFist{z-index:23;pointer-events:auto;cursor:grab}   /* over the handle it grips */
          /* Desktop: bigger crayons (they're thin, so they need the size to be seen). */
          @media (hover:hover) and (pointer:fine){
-            :root{--chmax:144px}
-            .crayon{width:56px;padding:0 12px}
-            #stage{padding-right:calc(88px + env(safe-area-inset-right));padding-left:calc(112px + env(safe-area-inset-left))}
+            /* Two sidebars as wide as each other: hand, glass and printer on the left, the tools on
+               the right (pinned to the screen's edge by the script), --side wide and 14px in. */
+            :root{--slotmax:152px;--side:152px}
+            #stage{padding-right:calc(var(--side) + 28px + env(safe-area-inset-right));padding-left:calc(var(--side) + 28px + env(safe-area-inset-left))}
          }
          /* Phones and tablets: while a page is scrolled right to the top, Safari fills its top and
             bottom bars with the flat background colour (grey), not the pattern. Scrolled, it shows
@@ -116,7 +132,7 @@
          /* Tablet: room on the left for the hand holding the glass, and no pinch-zoom anywhere. */
          html.tablet #stage{padding-left:calc(112px + env(safe-area-inset-left))}
          html.tablet,html.tablet body,html.tablet #stage,html.tablet #book,html.tablet #draw,html.tablet .hand{touch-action:none}
-         @media (max-width:600px){:root{--chmax:76px}.crayon{width:34px;padding:0 7px}.crayon svg{width:20px}}
+         @media (max-width:600px){:root{--slotmax:40px}}
          /* Print button, like the old point-and-click games: a little printer that opens the PDF.
             Computers and tablets: in the bottom of the left margin, under the hand. Phones: in the
             bar beside Back. The paper feeds out a little on hover. */
@@ -124,7 +140,8 @@
          -webkit-tap-highlight-color:transparent}
          #print[hidden]{display:none}
          /* Pixel art (tools/make_printer.py): back, paper and front layers, the paper rising on hover.
-            Shown at 1:1 on computers (crisp at 2x too) and a third of that on phones. */
+            Shown at 2:1 on computers and tablets (as wide as the hand and glass above it) and a third
+            of 1:1 on phones. */
          #print .printer{display:block;width:32px;height:29.33px;--lift:-1.5px;image-rendering:pixelated;
          background:url("images/printer-front.png") 0 0/100% 100% no-repeat,url("images/printer-paper.png") 0 0/100% 100% no-repeat,
          url("images/printer-back.png") 0 0/100% 100% no-repeat;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));
@@ -132,8 +149,8 @@
          #print:hover .printer,#print:focus-visible .printer{background-position:0 0,0 var(--lift),0 0}
          #print:active .printer{transform:translateY(1px)}
          html:not(.bleed) #print,html.tablet #print{position:fixed;z-index:4;flex-direction:column;gap:0;
-         left:max(14px,env(safe-area-inset-left));bottom:max(12px,env(safe-area-inset-bottom))}
-         html:not(.bleed) #print .printer,html.tablet #print .printer{width:96px;height:88px;--lift:-4px}
+         left:calc(max(14px,env(safe-area-inset-left)) - 20px);bottom:max(12px,env(safe-area-inset-bottom))}   /* the art's empty edge off-screen, so the printer lines up with the hand */
+         html:not(.bleed) #print .printer,html.tablet #print .printer{width:192px;height:176px;--lift:-8px}
          /* Phone on its side: put Back/PDF in the left margin so the book gets the full height. */
          @media (orientation:landscape) and (max-height:500px){
             .bar{position:absolute;top:0;left:0;z-index:5;flex-direction:column;align-items:flex-start;gap:8px;
@@ -560,10 +577,11 @@
             return out.filter(function (s) { return s.page >= 1 && s.page <= n; });
          }
 
-         // Keep the canvases over the book and the crayons just right of it. They're positioned on
+         // Keep the canvases over the book and the crayons just right of it (computers: at the right edge). They're positioned on
          // the page (absolute), so while a phone is zoomed in they already move with the book and
          // are left where they are (screen measurements then describe the zoomed view, not the page).
          var lastLayout = '', root = document.documentElement;
+         var sidebar = window.matchMedia('(hover: hover) and (pointer: fine)').matches;   // computers: tools at the screen's right edge
          (function layout() {
             requestAnimationFrame(layout);
             if (root.classList.contains('zoomed')) return;
@@ -582,9 +600,10 @@
                });
                setMask();
                var bw = box.offsetWidth, bh = box.offsetHeight, vw = root.clientWidth, vh = root.clientHeight;
-               box.style.left = Math.min(vw - bw - 4, b.left + r.left + 2 * r.pageWidth + 6) + sx + 'px';
+               box.style.left = (sidebar ? vw - bw - 14 : Math.min(vw - bw - 4, b.left + r.left + 2 * r.pageWidth + 6)) + sx + 'px';
                box.style.top = Math.max(4, Math.min(vh - bh - 4, b.top + r.top + r.height / 2 - bh / 2)) + sy + 'px';
                box.style.visibility = 'visible';
+               box.dispatchEvent(new Event('placed'));   // the hand lines up with the blue crayon
             }
          })();
 
@@ -637,7 +656,7 @@
                   m = make(true);
                   b.dataset.bigEraserCursor = m.url; b.dataset.bigEraserHotspot = m.hot;
                }
-               if (color === b.dataset.color && !erase) draw.style.cursor = cursorFor(color);
+               if (color === b.dataset.color) root.style.cursor = cursorFor(color);
             };
             art.src = b.querySelector('img').src;
          });
@@ -648,7 +667,9 @@
             var prev = color;
             color = c;
             body.classList.toggle('writing', !!c);
-            draw.style.cursor = c ? cursorFor(c) : '';
+            // The tool is the cursor everywhere (it only writes on the pages). Links, buttons and
+            // the glass keep their own cursors; the page passes this one down to everything else.
+            root.style.cursor = c ? cursorFor(c) : '';
             if (c) setMask();
             if (c === PENCIL) readyPencil();
             buttons.forEach(function (b) {
@@ -664,7 +685,7 @@
          // Fly a crayon from the point where it was dropped back to its spot in the box.
          function zipBack(c, x, y) {
             var b = buttonFor(c), art = b.firstElementChild, home = art.getBoundingClientRect();
-            var w = home.width, h = home.height;
+            var w = art.offsetWidth, h = art.offsetHeight, ang = getComputedStyle(b).getPropertyValue('--a').trim();   // it lies at an angle in its slot
             var s0 = (b.dataset.cursorLen ? +b.dataset.cursorLen * (b.dataset.bigCursor ? CUR : 1) : 31) / h;   // starts the size of the cursor
             var fly = document.createElement('div');
             fly.className = 'flying';
@@ -675,7 +696,8 @@
             // start pointing down-left with the tip at (x, y), like the cursor
             var k = 0.7071 * (h / 2) * s0;
             var from = 'translate(' + (x + k - w / 2) + 'px,' + (y - k - h / 2) + 'px) rotate(-135deg) scale(' + s0 + ')';
-            var to = 'translate(' + home.left + 'px,' + home.top + 'px) rotate(0deg) scale(1)';
+            var cx = home.left + home.width / 2, cy = home.top + home.height / 2;   // rotating keeps the centre
+            var to = 'translate(' + (cx - w / 2) + 'px,' + (cy - h / 2) + 'px) rotate(' + ang + ') scale(1)';
             function land() { fly.remove(); b.style.visibility = ''; }
             if (!fly.animate) return land();
             var a = fly.animate([{ transform: from }, { transform: to }],
@@ -851,7 +873,7 @@
             if (!erase || e.pointerId !== erase.id) return;
             if (erase.pts.length) rub();
             var er = erase; erase = null;
-            if (color) draw.style.cursor = cursorFor(color);
+            draw.style.cursor = '';   // back to the pencil
             Promise.all(er.slots.map(function (s) {
                return showInk('pencil', s.page, inkCanvas.pencil[s.page], true, ++strokeGen);
             })).then(function () {
@@ -1091,19 +1113,22 @@
          }
 
          // The hand: the two photos (cropped from the same shot) lined up at the wrist, upright
-         // in the left margin with fist and glass level with the middle of the book. Sizes are
-         // in the images' own pixels.
-         var FIST = { w: 150, wristX: 53, wristY: 187, rodX: 74, rodY: 47 };   // rod: where the handle goes through
+         // in the left margin with fist and glass (together) level with the blue crayon across the
+         // way. Sizes are in the images' own pixels.
+         var FIST = { w: 150, h: 204, wristX: 53, wristY: 187, rodX: 74, rodY: 47 };   // rod: where the handle goes through
          var OPEN = { w: 238, wristX: 90, wristY: 314 };
-         var HAND = 0.62, OPEN_K = HAND * 0.88;   // the open-hand photo is a little bigger than the fist
-         // The handle is HANDLE_U SVG units thick (glass radius = 100); in the fist it's HANDLE_PX
-         // wide, gripped GRIP_AT units out from the centre of the glass (just past the chrome neck).
-         var HANDLE_U = 32.7, HANDLE_PX = 21, GRIP_AT = 215, HELD_A = 160, OUT_A = 45;
+         // HAND sets the size of the lot (hand and the glass in it), to match the printer below.
+         var HAND = 0.38, OPEN_K = HAND * 0.88;   // the open-hand photo is a little bigger than the fist
+         // The handle is HANDLE_U SVG units thick (glass radius = 100); in the fist photo it's 34px
+         // (HANDLE_PX on screen), gripped GRIP_AT units out from the centre of the glass (just past the chrome neck).
+         var HANDLE_U = 32.7, HANDLE_PX = 34 * HAND, GRIP_AT = 215, HELD_A = 160, OUT_A = 45;
          var rod = { x: 0, y: 0 };
          function placeHand() {
-            var fr = document.getElementById('frame').getBoundingClientRect();
-            var mid = fr.height ? fr.top + fr.height / 2 : window.innerHeight / 2;
-            var rise = GRIP_AT * HANDLE_PX / HANDLE_U * Math.sin(HELD_A * Math.PI / 180);   // glass sits this much above the fist
+            var blue = document.querySelectorAll('.crayon')[1].getBoundingClientRect();
+            var unit = HANDLE_PX / HANDLE_U, rise = GRIP_AT * unit * Math.sin(HELD_A * Math.PI / 180);   // glass sits this much above the fist
+            // mid: halfway between fist and glass. Lower it so the middle of the lot (top of the
+            // glass's rim, 108 units up, to the bottom of the fist) is level with the blue crayon.
+            var mid = blue.top + blue.height / 2 - ((FIST.h - FIST.rodY) * HAND - 108 * unit) / 2;
             var wx = 12 + FIST.wristX * HAND, wy = mid + rise / 2 - (FIST.rodY - FIST.wristY) * HAND;
             function put(img, g, k) {
                img.style.width = g.w * k + 'px';
@@ -1129,7 +1154,7 @@
          // twice, quickly: "give it back". It stops the moment the glass is picked up or returned.
          function beckon() {
             setTimeout(beckon, 10000 + Math.random() * 10000);
-            if (!lens.out || lens.held || drag || tween || document.hidden) return;
+            if (!lens.out || lens.held || drag || tween || document.hidden || handOpen.classList.contains('nope')) return;
             var steps = [true, false, true, false];   // fist, open, fist, open
             (function step(i) {
                if (lens.held || drag || tween) return showHand();
@@ -1141,6 +1166,25 @@
             })(0);
          }
          if (glass) setTimeout(beckon, 10000 + Math.random() * 10000);
+         // Lift the hand while the mouse is over it (or over the glass in it). Lifted, it's still
+         // "over" in the strip it rose out of, so it doesn't bob up and down at its bottom edge.
+         var LIFT = 3, lifted = false;
+         function setLift(on) {
+            if (on === lifted) return;
+            lifted = on;
+            [handFist, handOpen, loupe].forEach(function (el) { el.classList.toggle('lift', on && (el !== loupe || lens.held)); });
+         }
+         window.addEventListener('pointermove', function (e) {
+            if (e.pointerType !== 'mouse' || !lens.out || drag || tween) return setLift(false);
+            var t = e.target, els = lens.held ? [handFist, loupe] : [handOpen];
+            var on = els.some(function (el) { return el.contains(t); });
+            if (!on && lifted) on = els.some(function (el) {
+               var r = (el === loupe ? lensCv : el).getBoundingClientRect();
+               return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom + LIFT;
+            });
+            setLift(on);
+         });
+         document.documentElement.addEventListener('pointerleave', function () { setLift(false); });
          function overHand(x, y) {
             var r = handOpen.getBoundingClientRect(), m = 24;
             return x > r.left - m && x < r.right + m && y > r.top - m && y < r.bottom + m;
@@ -1186,13 +1230,15 @@
             applyLens();
             if (t >= 1) { var done = tween.done; tween = null; if (done) done(); }
          })();
-         window.addEventListener('resize', function () {
+         function refit() {
             if (!lens.out) return;
             sizeLens();
             placeHand();
-            if (lens.held) { var p = heldPose(); lens.x = p.x; lens.y = p.y; lens.s = p.s; lens.a = p.a; applyLens(); }
-            else placeLens(lens.x, lens.y);
-         });
+            if (lens.held && !tween) { var p = heldPose(); lens.x = p.x; lens.y = p.y; lens.s = p.s; lens.a = p.a; applyLens(); }
+            else if (!lens.held) placeLens(lens.x, lens.y);
+         }
+         window.addEventListener('resize', refit);
+         document.getElementById('crayons').addEventListener('placed', refit);
 
          // The magic-eye tiles (600px wide) starting at (ox, oy), covering x0..x1, y0..y1.
          function tiles(ox, oy, x0, y0, x1, y1) {
@@ -1362,6 +1408,7 @@
             e.preventDefault();
             e.stopPropagation();
             e.target.setPointerCapture(e.pointerId);
+            setLift(false);
             ptr = { x: e.clientX, y: e.clientY };
             var click = { t0: performance.now(), sx: e.clientX, sy: e.clientY, moved: false, wasHeld: lens.held };
             if (lens.held) {
@@ -1379,10 +1426,19 @@
          loupe.addEventListener('pointerdown', grab);
          handFist.addEventListener('pointerdown', grab);
          handFist.addEventListener('dragstart', function (e) { e.preventDefault(); });
-         // Clicking the empty hand calls the glass back from wherever it is (remembering that spot).
+         // Clicking the empty hand calls the glass back from wherever it is (remembering that spot),
+         // unless you hold a crayon or the pencil out to it: then it waves it off.
          handOpen.addEventListener('dragstart', function (e) { e.preventDefault(); });
+         handOpen.addEventListener('animationend', function () { handOpen.classList.remove('nope'); });
          handOpen.addEventListener('click', function () {
             if (!lens.out || lens.held || drag) return;
+            if (document.body.classList.contains('writing')) {   // holding a crayon out to it: no thanks
+               handOpen.classList.remove('nope');
+               void handOpen.offsetWidth;   // so a second click wags it again
+               handOpen.classList.add('nope');
+               return;
+            }
+            setLift(false);
             save();
             goHome();
          });

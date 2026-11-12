@@ -70,6 +70,17 @@ for y in range(LH):
     for x in range(LW):
         if small.getpixel((x, y))[3] > 110:
             paper.putpixel((lx0 + x, ly0 + y), PAPER)
+# The slit down the middle of the U is thinner than a pixel at this size, so the U comes out
+# solid. Cut it back in, a cell (S pixels) wide so it shows, wherever the full-size logo has
+# it (between x 60 and 140).
+k = LW / logo.width
+for y in range(LH):
+    sy = int((y + .5) / k)
+    gap = [x for x in range(60, 140) if logo.getpixel((x, sy))[3] < 128]
+    if gap and max(gap) - min(gap) < 40:          # the slit, not the open space above the U
+        x0 = lx0 + round((min(gap) + max(gap)) / 2 * k - S / 2)
+        for dx in range(S):
+            paper.putpixel((x0 + dx, ly0 + y), RED)
 
 # ---- printer back: the top deck behind the paper
 back = layer()
