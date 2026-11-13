@@ -98,6 +98,14 @@
          #loupe .grip{pointer-events:visiblePainted;cursor:grab}
          #loupe .rim.grip{pointer-events:visibleStroke}
          #loupe.dragging canvas,#loupe.dragging .grip{cursor:grabbing}
+         /* The hand, and the glass while it's small in it (or in Clippy's), are pixel art
+            (tools/make_pixel_hand.py), in blocks the lamp's size; pulled out, the glass is the
+            photo again. In pixel mode the lens is drawn in a few big pixels and the drawn glare
+            is left off (the pixel glass has its own glint). */
+         .hand{image-rendering:pixelated}
+         #loupe.pixel canvas{border-radius:0;image-rendering:pixelated}
+         #loupe.pixel image{image-rendering:pixelated}
+         #loupe.pixel svg > circle,#loupe.pixel svg > path{display:none}
          .hand{position:fixed;left:0;top:0;display:none;visibility:hidden;pointer-events:none;
          -webkit-user-drag:none;user-select:none;filter:drop-shadow(0 4px 6px rgba(0,0,0,.45))}
          /* Hovering the hand (and the glass in it) lifts it a little, with the printer paper's spring. */
@@ -137,6 +145,15 @@
          /* Print button, like the old point-and-click games: a little printer that opens the PDF.
             Computers and tablets: in the bottom of the left margin, under the hand. Phones: in the
             bar beside Back. The paper feeds out a little on hover. */
+         /* Back: a chunky white double arrow (tools/make_back_arrow.py), 2x on phones, 3x (the left
+            margin's pixel size) on computers and tablets, where it's centred over the margin like
+            everything under it (90px in). */
+         #back{display:block;line-height:0;-webkit-tap-highlight-color:transparent}
+         #back .arrow{display:block;width:38px;height:32px;image-rendering:pixelated;
+         background:url("images/back-arrow.png") 0 0/100% 100% no-repeat}
+         #back:active .arrow{transform:translateY(1px)}
+         html:not(.bleed) #back .arrow,html.tablet #back .arrow{width:57px;height:48px}
+         html:not(.bleed) #back,html.tablet #back{margin-left:calc(90px - 28.5px - max(16px,env(safe-area-inset-left)))}
          #print{display:inline-flex;align-items:center;gap:6px;margin-right:auto;text-decoration:none;
          -webkit-tap-highlight-color:transparent}
          #print[hidden]{display:none}
@@ -150,8 +167,8 @@
          #print:hover .printer,#print:focus-visible .printer{background-position:0 0,0 var(--lift),0 0}
          #print:active .printer{transform:translateY(1px)}
          html:not(.bleed) #print,html.tablet #print{position:fixed;z-index:4;flex-direction:column;gap:0;
-         left:calc(max(14px,env(safe-area-inset-left)) - 20px);bottom:max(12px,env(safe-area-inset-bottom))}   /* the art's empty edge off-screen, so the printer lines up with the hand */
-         html:not(.bleed) #print .printer,html.tablet #print .printer{width:192px;height:176px;--lift:-8px}
+         left:calc(max(14px,env(safe-area-inset-left)) + 4px);bottom:max(12px,env(safe-area-inset-bottom))}   /* centred on the left margin's middle, 90px in */
+         html:not(.bleed) #print .printer,html.tablet #print .printer{width:144px;height:132px;--lift:-6px}   /* 3px pixels, like everything on the left */
          /* Phone on its side: put Back/PDF in the left margin so the book gets the full height. */
          @media (orientation:landscape) and (max-height:500px){
             .bar{position:absolute;top:0;left:0;z-index:5;flex-direction:column;align-items:flex-start;gap:8px;
@@ -162,10 +179,10 @@
          }
          /* Clippy (computers and tablets): above the hand and glass in the left margin. Click him
             for his balloon, an old Office help balloon in chunky pixels: three questions and a box
-            to type your own. Frames from clippy.js (tools/make_clippy.py), shown at 1.5x where
-            there's room for him, 1x otherwise (the script sizes him), smoothly scaled. Everything
-            in the balloon is drawn on a 2px grid. */
-         #clippy{position:fixed;left:0;top:0;z-index:23;display:none;visibility:hidden;
+            to type your own. Frames from clippy.js (tools/make_clippy.py), scaled (smoothly) to
+            be as wide as the hand and glass below him (the script sizes and places him).
+            Everything in the balloon is drawn on a 2px grid. */
+         #clippy{position:fixed;left:0;top:0;z-index:24;display:none;visibility:hidden;   /* over the lamp's dark (the glass, coming later, still goes over him) */
          font:16px/1.25 "Pixelify Sans",monospace;font-weight:400;color:#000;text-shadow:none;
          -webkit-font-smoothing:none}
          html:not(.bleed) #clippy,html.tablet #clippy{display:block}
@@ -200,6 +217,47 @@
          #clippy form button:active{box-shadow:inset 2px 2px #000,inset -2px -2px #fff,inset 4px 4px #7b7b7b,inset -4px -4px #dcdcdc;
          padding-top:2px}
          #clippy .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+         /* Desk lamp (computers and tablets): on the desk in the left margin, between the hand and
+            the printer. Pixel art at 3x (tools/make_lamp.py), placed and scaled by the script. */
+         #lamp{position:fixed;left:0;top:0;z-index:25;display:none;visibility:hidden;width:111px;height:120px;   /* over the dark */
+         padding:0;margin:0;border:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;transform-origin:0 0;
+         filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
+         html:not(.bleed) #lamp,html.tablet #lamp{display:block}
+         #lamp.placed{visibility:visible}
+         #lamp .art{display:block;width:100%;height:100%;image-rendering:pixelated;
+         background:url("images/lamp-off.png") 0 0/100% 100% no-repeat}
+         html.night #lamp .art{background-image:url("images/lamp-on.png")}
+         /* Hovered, it turns to look at you, halfway round first (the script steps data-look). */
+         #lamp[data-look="mid"] .art{background-image:url("images/lamp-mid-off.png")}
+         html.night #lamp[data-look="mid"] .art{background-image:url("images/lamp-mid-on.png")}
+         #lamp[data-look="look"] .art{background-image:url("images/lamp-look-off.png")}
+         html.night #lamp[data-look="look"] .art{background-image:url("images/lamp-look-on.png")}
+         #lamp:active .art{transform:translateY(1px)}
+         /* Click it again and the lights go out altogether: everything black (Clippy too), but for
+            the lamp's dim outline, so you can find it to click the room lights back on. */
+         #lamp .art{transition:filter .4s}
+         html.dark #lamp .art{filter:brightness(.28)}
+         #blackout{position:fixed;inset:0;z-index:24;pointer-events:none;background:#000;opacity:0;visibility:hidden;
+         transition:opacity .4s,visibility 0s .4s}
+         html.dark #blackout{opacity:1;visibility:visible;transition-delay:0s}
+         /* The lamp on: the room goes dark (multiplied down) apart from a warm pool of light over
+            the open pages, which glides after them (--px, --py: its middle; --pw, --ph: its size),
+            and a glow round the bulb. Over the book, tools and glass; under Clippy (he's lit by
+            his own screen) and the lamp. */
+         @property --px{syntax:'<length>';inherits:false;initial-value:0px}
+         @property --py{syntax:'<length>';inherits:false;initial-value:0px}
+         @property --pw{syntax:'<length>';inherits:false;initial-value:0px}
+         @property --ph{syntax:'<length>';inherits:false;initial-value:0px}
+         #night{position:fixed;inset:0;z-index:23;pointer-events:none;mix-blend-mode:multiply;opacity:0;visibility:hidden;
+         --px:50vw;--py:50vh;--pw:40vw;--ph:60vh;
+         background:radial-gradient(var(--pw) var(--ph) at var(--px) var(--py),#fff8ea 0%,#fbecd2 55%,#c4a684 74%,#5a4a3e 92%,#463a32 100%);
+         transition:opacity .35s,visibility 0s .35s,--px .6s,--py .6s,--pw .6s,--ph .6s}
+         #lampGlow{position:fixed;left:0;top:0;z-index:23;width:300px;height:300px;margin:-150px 0 0 -150px;pointer-events:none;
+         mix-blend-mode:screen;opacity:0;visibility:hidden;transition:opacity .35s,visibility 0s .35s;
+         background:radial-gradient(closest-side,rgba(255,210,130,.6),rgba(255,180,90,.2) 45%,rgba(255,170,80,0))}
+         html.night #night,html.night #lampGlow{opacity:1;visibility:visible;transition-delay:0s}
+         html.night #lampGlow{animation:flicker .4s steps(1)}
+         @keyframes flicker{0%{opacity:.2}20%{opacity:1}35%{opacity:.4}50%{opacity:1}}
       </style>
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -207,7 +265,7 @@
    </head>
    <body>
       <div class="bar">
-         <a href="./">&larr; Back</a>
+         <a id="back" href="./" title="Back" aria-label="Back"><span class="arrow" aria-hidden="true"></span></a>
          <a id="print" href="#" target="_blank" rel="noopener" title="Print (opens the PDF)" aria-label="Print" hidden>
             <span class="printer" aria-hidden="true"></span>
          </a>
@@ -231,7 +289,7 @@
             <p class="sr" aria-live="polite"></p>
             <ul></ul>
             <form autocomplete="off">
-               <input type="text" maxlength="120" placeholder="Type your question here" aria-label="Ask Clippy a question" enterkeyhint="send">
+               <input type="text" maxlength="120" placeholder="Type your question" aria-label="Ask Clippy a question" enterkeyhint="send">
                <button type="submit">Ask</button>
             </form>
          </div>
@@ -244,7 +302,7 @@
                  the handle runs out at 45 degrees; #lensArm turns it for the hand. The shapes after
                  it are invisible grab areas over the rim, neck and handle. -->
             <g id="lensArm">
-               <image href="images/magnifier.png" x="-143.95" y="-142.66" width="416.3" height="416.3"/>
+               <image id="lensPhoto" href="images/magnifier.png" x="-143.95" y="-142.66" width="416.3" height="416.3"/>
                <circle class="rim grip" r="104.5" fill="none" stroke="#000" stroke-width="12" opacity="0"/>
                <g transform="rotate(45)">
                   <rect class="grip" x="105" y="-12" width="32" height="24" fill="#000" opacity="0"/>
@@ -261,8 +319,12 @@
             <path d="M-40.6 87 A96 96 0 0 1 -94.5 -16.7 Q-72 42 -40.6 87 Z" fill="#fff" opacity=".4"/>
          </svg>
       </div>
-      <img id="handOpen" class="hand" src="images/hand-open.png" alt="">
-      <img id="handFist" class="hand" src="images/hand-fist.png" alt="">
+      <img id="handOpen" class="hand" src="images/hand-open-pixel.png" alt="">
+      <img id="handFist" class="hand" src="images/hand-fist-pixel.png" alt="">
+      <button id="lamp" type="button" aria-label="Desk lamp" aria-pressed="false"><span class="art"></span></button>
+      <div id="night" aria-hidden="true"></div>
+      <div id="lampGlow" aria-hidden="true"></div>
+      <div id="blackout" aria-hidden="true"></div>
 
       <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
       <script>
@@ -660,7 +722,7 @@
                box.style.left = (sidebar ? vw - bw - 14 : Math.min(vw - bw - 4, b.left + r.left + 2 * r.pageWidth + 6)) + sx + 'px';
                box.style.top = Math.max(4, Math.min(vh - bh - 4, b.top + r.top + r.height / 2 - bh / 2)) + sy + 'px';
                box.style.visibility = 'visible';
-               box.dispatchEvent(new Event('placed'));   // the hand lines up with the blue crayon
+               box.dispatchEvent(new Event('placed'));   // (the glass re-fits: the book may have moved)
             }
          })();
 
@@ -686,6 +748,7 @@
          var desktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
          var glass = desktop || root.classList.contains('tablet');   // the magnifying glass: computers and tablets
          var clippy = glass ? startClippy(desktop) : null;           // ...and Clippy, above it
+         var lampBtn = document.getElementById('lamp');
          var lastX = -1, lastY = -1;
          document.addEventListener('pointermove', function (e) { lastX = e.clientX; lastY = e.clientY; }, { passive: true });
          buttons.forEach(function (b) { if (b.dataset.cursor) new Image().src = b.dataset.cursor; });
@@ -789,7 +852,7 @@
             return slots().some(function (s) { return x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h; });
          }
          document.addEventListener('pointerdown', function (e) {
-            if (!color || box.contains(e.target) || isGlass(e.target)) return;
+            if (!color || box.contains(e.target) || isGlass(e.target) || lampBtn.contains(e.target)) return;
             if (e.target === draw && onPage(e.clientX, e.clientY)) return;
             setColor(null, e.clientX, e.clientY);
          }, true);
@@ -800,6 +863,8 @@
          // Where the draw canvas is on screen right now (it moves when a phone is zoomed in), taken
          // at the start of each stroke; pos() gives points on the canvas.
          function drawOrigin() { var d = draw.getBoundingClientRect(); return { x: d.left, y: d.top }; }
+         // The same, when the draw canvas may be hidden (no tool out): it lies exactly over the book.
+         function bookOrigin() { var d = block.getBoundingClientRect(); return { x: d.left, y: d.top }; }
          function pos(e) { return { x: e.clientX - org.x, y: e.clientY - org.y }; }
 
          draw.addEventListener('contextmenu', function (e) { if (color) e.preventDefault(); });
@@ -1030,6 +1095,28 @@
          }
 
 
+         // The lamp's click, made on the fly like the page turn's: short bursts of filtered noise
+         // (start, length, pitch, loudness).
+         var sfxCtx = null;
+         var SFX = { lamp: [[0, .006, 2600, .7], [.05, .012, 1400, .5]] };
+         function sfx(kind) {
+            var AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return;
+            try { sfxCtx = sfxCtx || new AC(); } catch (e) { return; }
+            if (sfxCtx.state === 'suspended') sfxCtx.resume();
+            var a = sfxCtx, now = a.currentTime, sr = a.sampleRate;
+            SFX[kind].forEach(function (s) {
+               var len = Math.floor(sr * s[1] * 5), buf = a.createBuffer(1, len, sr), d = buf.getChannelData(0);
+               for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / sr / s[1]);
+               var src = a.createBufferSource(), bp = a.createBiquadFilter(), g = a.createGain();
+               src.buffer = buf;
+               bp.type = 'bandpass'; bp.frequency.value = s[2] * (0.9 + Math.random() * 0.2); bp.Q.value = 1.2;
+               g.gain.value = s[3];
+               src.connect(bp); bp.connect(g); g.connect(a.destination);
+               src.start(now + s[0]);
+            });
+         }
+
          // ---- keeping scribbles in this browser
          var dbp = new Promise(function (res) {
             try {
@@ -1096,6 +1183,7 @@
          var arm = document.getElementById('lensArm');
          var handOpen = document.getElementById('handOpen'), handFist = document.getElementById('handFist');
          var src = document.createElement('canvas'), sctx = src.getContext('2d');
+         sctx.imageSmoothingQuality = 'high';   // so the pixel lens's few pixels are averages, not specks
          var tmp = document.createElement('canvas'), tctx = tmp.getContext('2d');
          var bgImg = new Image();
          bgImg.src = 'images/magic-eye-bg.webp';
@@ -1151,7 +1239,9 @@
 
          function sizeLens() {
             var D = Math.round(Math.max(220, Math.min(360, 0.42 * Math.min(window.innerWidth, window.innerHeight))));
-            var px = Math.round(D * (window.devicePixelRatio || 1));
+            // pixel mode: one lens pixel per PIXEL_CELL screen pixels, at the size it's held at
+            var px = pixel ? Math.round(200 * HANDLE_PX / HANDLE_U * (mine ? 1.1 : 1) / PIXEL_CELL)
+                           : Math.round(D * (window.devicePixelRatio || 1));
             lens.R = D / 2;
             loupe.style.width = loupe.style.height = D + 'px';
             if (lensCv.width !== px) {
@@ -1170,24 +1260,32 @@
             applyLens();
          }
 
-         // The hand: the two photos (cropped from the same shot) lined up at the wrist, upright
-         // in the left margin with fist and glass (together) level with the blue crayon across the
-         // way. Sizes are in the images' own pixels.
+         // The hand: the two pictures (pixel art from photos cropped from the same shot) lined up
+         // at the wrist, upright in the left margin. Sizes are in the photos' own pixels.
          var FIST = { w: 150, h: 204, wristX: 53, wristY: 187, rodX: 74, rodY: 47 };   // rod: where the handle goes through
          var OPEN = { w: 238, wristX: 90, wristY: 314 };
-         // HAND sets the size of the lot (hand and the glass in it), to match the printer below.
+         // HAND sets the size of the lot (hand and the glass in it): 3px pixels, like the rest of the
+         // left margin (tools/make_pixel_hand.py is drawn for this size).
          var HAND = 0.38, OPEN_K = HAND * 0.88;   // the open-hand photo is a little bigger than the fist
          // The handle is HANDLE_U SVG units thick (glass radius = 100); in the fist photo it's 34px
          // (HANDLE_PX on screen), gripped GRIP_AT units out from the centre of the glass (just past the chrome neck).
          var HANDLE_U = 32.7, HANDLE_PX = 34 * HAND, GRIP_AT = 215, HELD_A = 160, OUT_A = 45;
          var rod = { x: 0, y: 0 };
-         function placeHand() {
-            var blue = document.querySelectorAll('.crayon')[1].getBoundingClientRect();
-            var unit = HANDLE_PX / HANDLE_U, rise = GRIP_AT * unit * Math.sin(HELD_A * Math.PI / 180);   // glass sits this much above the fist
-            // mid: halfway between fist and glass. Lower it so the middle of the lot (top of the
-            // glass's rim, 108 units up, to the bottom of the fist) is level with the blue crayon.
-            var mid = blue.top + blue.height / 2 - ((FIST.h - FIST.rodY) * HAND - 108 * unit) / 2;
-            var wx = 12 + FIST.wristX * HAND, wy = mid + rise / 2 - (FIST.rodY - FIST.wristY) * HAND;
+         var SIDE_MID = 90;   // the middle of the left margin (14px in, --side wide), where the printer's centred
+         // The fist and the glass in it, as one block, measured from the wrist: from the end of the
+         // handle sticking out past the fist (left) to the glass's rim (right), and from the top of
+         // the rim to the bottom of the fist.
+         function handBox() {
+            var u = HANDLE_PX / HANDLE_U, a = HELD_A * Math.PI / 180, RIM = 108, TAIL = 343, THICK = 17;   // SVG units
+            var rx = (FIST.rodX - FIST.wristX) * HAND, ry = (FIST.rodY - FIST.wristY) * HAND;
+            return { left: Math.min(-FIST.wristX * HAND, rx + (TAIL - GRIP_AT) * u * Math.cos(a) - THICK * u),
+                     right: rx - GRIP_AT * u * Math.cos(a) + RIM * u,
+                     top: ry - GRIP_AT * u * Math.sin(a) - RIM * u,
+                     bottom: (FIST.h - FIST.wristY) * HAND };
+         }
+         function placeHand(top) {   // the top of the block at top, centred across the margin
+            var hb = handBox();
+            var wx = SIDE_MID - (hb.left + hb.right) / 2, wy = top - hb.top;
             function put(img, g, k) {
                img.style.width = g.w * k + 'px';
                img.style.left = wx - g.wristX * k + 'px';
@@ -1250,14 +1348,15 @@
          // Where the glass was last out (fractions of the screen), so a click on the hand can put
          // it back there. Kept in this browser along with whether it's in the hand.
          var spot = null;
-         function save() {
+         function saveGlass() {
             if (!lens.held) spot = { x: lens.x / window.innerWidth, y: lens.y / window.innerHeight };
             try { localStorage.setItem('uncle-glass', JSON.stringify({ held: lens.held, x: spot && spot.x, y: spot && spot.y })); } catch (e) {}
          }
-         function spotPose() {   // full size at the remembered spot, or over the middle of the book
-            var fr = document.getElementById('frame').getBoundingClientRect();
-            var x = spot ? spot.x * window.innerWidth : fr.left + fr.width / 2;
-            var y = spot ? spot.y * window.innerHeight : fr.top + fr.height / 2;
+         function spotPose() {   // full size at the remembered spot, or (the first time) just right of the hand
+            var hr = handOpen.getBoundingClientRect(), fr = handFist.getBoundingClientRect();
+            var x = spot ? spot.x * window.innerWidth : Math.max(hr.right, fr.right) + lens.R + 24;
+            var y = spot ? spot.y * window.innerHeight
+                         : Math.max(lens.R + 8, Math.min(window.innerHeight - lens.R - 8, (hr.top + hr.bottom) / 2));
             return { x: Math.max(0, Math.min(window.innerWidth, x)), y: Math.max(0, Math.min(window.innerHeight, y)), s: 1, a: OUT_A };
          }
          // Clippy can end up with it (see letGo): small, at his side, until he gives it back.
@@ -1268,15 +1367,27 @@
          }
          if (clippy) clippy.onGiveBack = function () { mine = false; loupe.classList.remove('clippys'); goHome(); };
          function goHome() {   // into the hand, which closes on it
-            animateTo(heldPose(), 260, function () { lens.held = true; showHand(); save(); });
+            animateTo(heldPose(), 260, function () { lens.held = true; showHand(); saveGlass(); });
          }
          // Glide to a pose (or to wherever target() says, e.g. the pointer), then call done.
          var tween = null;
          function animateTo(target, dur, done) {
             tween = { t0: performance.now(), dur: dur, from: { x: lens.x, y: lens.y, s: lens.s, a: lens.a }, target: target, done: done };
          }
+         // Small and at rest in the hand (or Clippy's): pixel art. Moving or out: the photo.
+         var pixel = false, PIXEL_CELL = 3, lensPhoto = document.getElementById('lensPhoto');
+         if (glass) new Image().src = 'images/magnifier-pixel.png';
+         function setPixel(on) {
+            if (on === pixel) return;
+            pixel = on;
+            loupe.classList.toggle('pixel', on);
+            lensPhoto.setAttribute('href', on ? 'images/magnifier-pixel.png' : 'images/magnifier.png');
+            sizeLens();
+            lensBump++;
+         }
          (function tweenLoop() {
             requestAnimationFrame(tweenLoop);
+            if (glass) setPixel((lens.held || mine) && !tween && !drag);
             if (!tween) {
                // Being dragged: full size, but shrinking to hand size and turning to the holding
                // angle over the hand, so you can see it'll go back in (and the same over Clippy,
@@ -1298,16 +1409,87 @@
             if (t >= 1) { var done = tween.done; tween = null; if (done) done(); }
          })();
          // Clippy: in the middle of the gap between the Back link and the top of the glass in the hand.
-         function placeClippy() {
-            if (!clippy) return;
-            var hp = heldPose(), unit = HANDLE_PX / HANDLE_U;
-            clippy.place(document.querySelector('.bar').getBoundingClientRect().bottom, hp.y - 110 * unit);
+         // The left margin, one rule for all of it: Clippy, the hand (and the glass in it), the
+         // lamp and the printer (pinned to the bottom by the CSS), each at one fixed size (the
+         // pixel art in 3px pixels; Clippy as wide as the hand and glass), centred on the
+         // margin's middle (SIDE_MID), with the same space between each of them, and above
+         // Clippy (under the Back link).
+         var DESK = { w: 111, h: 120, mouthX: 29.77 * 3, mouthY: 13.96 * 3 };   // the lamp (3x its art), and its shade's mouth
+         var lampGlow = document.getElementById('lampGlow');
+         function placeSide() {
+            var top = document.querySelector('.bar').getBoundingClientRect().bottom;
+            var bottom = document.getElementById('print').getBoundingClientRect().top;
+            var hb = handBox(), handH = hb.bottom - hb.top, clipH = clippy ? clippy.fit(hb.right - hb.left) : 0;
+            var gap = Math.max(4, (bottom - top - clipH - handH - DESK.h) / (clippy ? 4 : 3));
+            var y = top + gap;
+            if (clippy) { clippy.place(Math.round(y)); y += clipH + gap; }
+            placeHand(y);
+            y += handH + gap;
+            var x = Math.round(SIDE_MID - DESK.w / 2);
+            y = Math.round(y);
+            lampBtn.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+            lampGlow.style.transform = 'translate(' + (x + DESK.mouthX) + 'px,' + (y + DESK.mouthY) + 'px)';
+            lampBtn.classList.add('placed');
          }
+
+         // ---- desk lamp: click it to read in the dark. The room goes dim apart from a warm pool
+         // of light over the open pages, which follows them (a cover alone, or a spread). Click
+         // again and the lamp goes off too: pitch black. A third time, the room lights come back.
+         // Reading by the lamp is kept in this browser (pitch black isn't: it'd look broken).
+         var night = document.getElementById('night'), poolKey = '';
+         var LAMP = [{ label: 'Desk lamp' }, { label: 'Desk lamp (on)' }, { label: 'Desk lamp (lights out)' }];   // room lights, lamp, nothing
+         var lampState = 0;
+         function setLamp(st, quiet) {
+            lampState = st;
+            root.classList.toggle('night', st === 1);
+            root.classList.toggle('dark', st === 2);
+            lampBtn.setAttribute('aria-pressed', st === 1);
+            lampBtn.setAttribute('aria-label', LAMP[st].label);
+            if (!quiet) sfx('lamp');
+            try { localStorage.setItem('uncle-lamp', st === 1 ? '1' : ''); } catch (e) {}
+         }
+         lampBtn.addEventListener('click', function () { setLamp((lampState + 1) % LAMP.length); });
+         // The mouse over it, it turns to look at you; off it, it turns back to the magazine.
+         // Either way through the halfway frame, a frame every LOOK_STEP ms.
+         var LOOKS = ['', 'mid', 'look'], LOOK_STEP = 90, looking = 0, lookT = 0;
+         function lookTo(to) {
+            clearTimeout(lookT);
+            (function step() {
+               if (looking === to) return;
+               looking += to > looking ? 1 : -1;
+               lampBtn.dataset.look = LOOKS[looking];
+               if (looking !== to) lookT = setTimeout(step, LOOK_STEP);
+            })();
+         }
+         lampBtn.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') lookTo(2); });
+         lampBtn.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') lookTo(0); });
+         (function pool() {
+            requestAnimationFrame(pool);
+            if (!glass || !canvasRect) return;   // (kept up to date while it's off, too, so it fades in in place)
+            var sl = slots();
+            if (!sl.length) return;
+            var o = bookOrigin(), x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+            sl.forEach(function (s) { x0 = Math.min(x0, s.x); y0 = Math.min(y0, s.y); x1 = Math.max(x1, s.x + s.w); y1 = Math.max(y1, s.y + s.h); });
+            var v = [o.x + (x0 + x1) / 2, o.y + (y0 + y1) / 2, (x1 - x0) * .8, (y1 - y0) * .8].map(Math.round);
+            var key = v.join();
+            if (key === poolKey) return;
+            var first = !poolKey;   // straight there the first time, gliding after that
+            poolKey = key;
+            if (first) night.style.transition = 'none';
+            ['--px', '--py', '--pw', '--ph'].forEach(function (p, i) { night.style.setProperty(p, v[i] + 'px'); });
+            if (first) { void night.offsetWidth; night.style.transition = ''; }
+         })();
+         if (glass) {
+            ['on', 'mid-off', 'mid-on', 'look-off', 'look-on'].forEach(function (n) { new Image().src = 'images/lamp-' + n + '.png'; });
+            var lampWas = '';
+            try { lampWas = localStorage.getItem('uncle-lamp'); } catch (e) {}
+            if (lampWas) setLamp(1, true);
+         }
+
          function refit() {
             if (!lens.out) return;
             sizeLens();
-            placeHand();
-            placeClippy();
+            placeSide();
             if (mine && !tween) { var cp = clippyPose(); lens.x = cp.x; lens.y = cp.y; lens.s = cp.s; lens.a = cp.a; applyLens(); }
             else if (lens.held && !tween) { var p = heldPose(); lens.x = p.x; lens.y = p.y; lens.s = p.s; lens.a = p.a; applyLens(); }
             else if (!lens.held) placeLens(lens.x, lens.y);
@@ -1394,6 +1576,7 @@
          function renderLens() {
             var dprNow = window.devicePixelRatio || 1;
             var R = lens.R * lens.s, Rs = R * SRC_PAD, k = Math.min(dprNow * MAG, 2048 / (2 * Rs));
+            if (pixel) k = lensCv.width / (2 * R);   // about one source pixel per (big) lens pixel
             var S = Math.ceil(2 * Rs * k), x0 = lens.x - Rs, y0 = lens.y - Rs, W = 2 * Rs;
             if (src.width !== S) src.width = src.height = S;
             sctx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
@@ -1461,8 +1644,7 @@
             loupe.classList.add('out');
             handOpen.style.display = handFist.style.display = 'block';
             sizeLens();
-            placeHand();
-            placeClippy();
+            placeSide();
             var at = null;
             try { at = JSON.parse(localStorage.getItem('uncle-glass')); } catch (e) {}
             if (at && at.x >= 0 && at.x <= 1 && at.y >= 0 && at.y <= 1) spot = { x: at.x, y: at.y };
@@ -1501,7 +1683,7 @@
             } else {
                var r0 = lens.R * lens.s;   // where on the glass it was grabbed, as a fraction of its size
                drag = { id: e.pointerId, nx: (lens.x - e.clientX) / r0, ny: (lens.y - e.clientY) / r0, over: false, click: click };
-               save();   // remember where it was picked up from, in case it goes back to the hand
+               saveGlass();   // remember where it was picked up from, in case it goes back to the hand
             }
             loupe.classList.add('dragging');
          }
@@ -1522,7 +1704,7 @@
                return;
             }
             setLift(false);
-            save();
+            saveGlass();
             goHome();
          });
          window.addEventListener('pointermove', function (e) {
@@ -1547,13 +1729,13 @@
                if (clippy.offer()) { mine = true; loupe.classList.add('clippys'); animateTo(clippyPose, 300); }
                else goHome();
             } else if (clicked && c.wasHeld) {   // click on the hand: out to where it was last time
-               animateTo(spotPose(), 320, save);
+               animateTo(spotPose(), 320, saveGlass);
             } else if (clicked || over) {
                goHome();
             } else if (tween) {   // still coming out of the hand
-               tween.done = save;
+               tween.done = saveGlass;
             } else {   // let go somewhere else: back to full size, where it is
-               animateTo({ x: lens.x, y: lens.y, s: 1, a: OUT_A }, 180, save);
+               animateTo({ x: lens.x, y: lens.y, s: 1, a: OUT_A }, 180, saveGlass);
             }
          }
          window.addEventListener('pointerup', letGo);
@@ -1602,17 +1784,30 @@
             { a: 'No thanks, I\u2019m good.', anim: 'IdleEyeBrowRaise' },
             { a: 'I said no! Quit it.', anim: 'GetAttention' }
          ];
+         // Not on his list, but he knows about these if you ask.
+         var MORE = [
+            { anim: 'Thinking', match: /lamp|light|dark|night|bright/,
+              a: (desktop ? 'Click' : 'Tap') + ' the lamp for a little mood lighting. Very romantic.' }
+         ];
          var TAKE = { a: 'Alright, stop annoying me. This is mine now.', anim: 'IdleFingerTap' };
          var HANDS_OFF = { a: 'Hands off! It\u2019s mine now. Ask nicely.', anim: 'IdleEyeBrowRaise' };
-         var GIVE = { q: 'Can I have the magnifying glass back?', anim: 'Explain',
-                      match: /glass|magnif|back|give|return|mine|please/,
-                      a: 'Fine, take it. Sheesh.' };
+         // Asking for it back: the first time he says no, and the question on his list turns
+         // polite; ask that and he gives in. Typed, it takes a "please" (or "may I"), and still not
+         // the first time.
+         var GIVE = { q: 'May I have it back please!', anim: 'Explain', a: 'Fine, take it. Sheesh.',
+                      match: /glass|magnif|loupe|back|give|return|mine|please/, polite: /pleas|pls|plz|may i/ };
+         var NOPE = { q: 'Can I have it back?', anim: 'IdleEyeBrowRaise', a: 'No.' };
+         var MAGIC = { anim: 'IdleFingerTap', a: 'What\u2019s the magic word?' };   // asked again, rudely
+         var begged = false;
          var IDLE = ['IdleEyeBrowRaise', 'IdleHeadScratch', 'IdleFingerTap', 'IdleSideToSide', 'Thinking',
                      'LookRight', 'LookUpRight', 'LookDownRight'];
-         var K = 0;   // the frames are shown at 1x or 1.5x (see place)
+         var K = 1;   // the frames' scale: set by fit(), so he's as wide as the hand and glass below him
+         var SEEN_W = 94;   // how wide he is at rest, inside his frame
          var FW = 124, FH = 93;   // frame size (tools/make_clippy.py), known before the data loads
 
          var box = document.getElementById('clippy'), agent = box.querySelector('.agent'), sprite = box.querySelector('.sprite');
+         agent.style.width = FW * K + 'px';
+         agent.style.height = FH * K + 'px';
          var balloon = box.querySelector('.balloon'), say = box.querySelector('.say'), live = box.querySelector('.sr');
          var form = box.querySelector('form'), input = form.querySelector('input'), list = box.querySelector('ul');
          var data = null, anim = null, rest = 0, cur = -1, lastDunno = -1, typer = 0;
@@ -1625,8 +1820,8 @@
             li.appendChild(b); list.appendChild(li);
          });
          var giveLi = document.createElement('li'), giveBtn = document.createElement('button');   // only while he has it
-         giveBtn.type = 'button'; giveBtn.className = 'q'; giveBtn.textContent = GIVE.q;
-         giveBtn.addEventListener('click', giveBack);
+         giveBtn.type = 'button'; giveBtn.className = 'q'; giveBtn.textContent = NOPE.q;
+         giveBtn.addEventListener('click', function () { askBack(begged); });
          giveLi.hidden = true;
          giveLi.appendChild(giveBtn); list.appendChild(giveLi);
 
@@ -1692,8 +1887,9 @@
          }
          function ask(text) {
             var t = text.toLowerCase().replace(/’/g, '\'');
-            if (has && GIVE.match.test(t)) return giveBack();
+            if (has && GIVE.match.test(t)) return askBack(GIVE.polite.test(t));
             for (var k = 0; k < QA.length; k++) if (QA[k].match.test(t)) return answer(QA[k]);
+            for (k = 0; k < MORE.length; k++) if (MORE[k].match.test(t)) return answer(MORE[k]);
             do k = Math.floor(Math.random() * DUNNO.length); while (k === lastDunno);   // never the same twice running
             lastDunno = k;
             answer(DUNNO[k]);
@@ -1712,9 +1908,20 @@
             show();
             answer(line);
          }
-         function giveBack() {
+         function askBack(polite) {
             if (!has) return;
+            if (!begged) {   // no, the first time, however it's asked
+               begged = true;
+               giveBtn.textContent = GIVE.q;
+               return tell(NOPE);
+            }
+            if (!polite) return tell(MAGIC);
+            giveBack();
+         }
+         function giveBack() {
             has = false;
+            begged = false;
+            giveBtn.textContent = NOPE.q;
             giveLi.hidden = true;
             tell(GIVE);
             if (api.onGiveBack) api.onGiveBack();
@@ -1784,19 +1991,20 @@
                var r = agent.getBoundingClientRect();
                return { x: r.left + r.width * 0.3, y: r.top + r.height * 0.8 };
             },
-            // Centre him (and his paper) in the gap from top to bottom, and over the hand and
-            // glass: 1.5x on computers if he fits in the gap, else 1x.
-            place: function (top, bottom) {
-               var k = desktop && bottom - top >= 1.5 * FH + 8 ? 1.5 : 1;
+            // Scale him so he's w wide (as wide as the hand and glass); returns his height.
+            fit: function (w) {
+               var k = w / SEEN_W;
                if (k !== K) {
                   K = k;
                   agent.style.width = FW * K + 'px';
                   agent.style.height = Math.round(FH * K) + 'px';
                   if (data) draw(cur);
                }
-               var x = Math.round((desktop ? 90 : 80) - FW * K / 2);
-               var y = Math.max(top + 4, Math.round((top + bottom - FH * K) / 2));
-               box.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+               return Math.round(FH * K);
+            },
+            // His top at y, centred on the left margin's middle, like everything else there.
+            place: function (y) {
+               box.style.transform = 'translate(' + Math.round(90 - FW * K / 2) + 'px,' + y + 'px)';
             }
          };
          return api;
