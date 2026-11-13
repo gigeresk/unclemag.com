@@ -89,6 +89,7 @@
          #loupe{position:fixed;left:0;top:0;z-index:22;display:none;pointer-events:none;touch-action:none;
          -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
          #loupe.out{display:block}
+         #loupe.dragging,#loupe.clippys{z-index:24}   /* over Clippy: offered to him, or his now */
          #loupe canvas{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:50%;
          pointer-events:auto;cursor:grab}
          body.writing #loupe canvas{pointer-events:none}   /* drawing goes through the glass */
@@ -159,7 +160,50 @@
             padding-left:calc(84px + env(safe-area-inset-left))}
             html.bleed .bar{top:100px}
          }
+         /* Clippy (computers and tablets): above the hand and glass in the left margin. Click him
+            for his balloon, an old Office help balloon in chunky pixels: three questions and a box
+            to type your own. Frames from clippy.js (tools/make_clippy.py), shown at 1.5x where
+            there's room for him, 1x otherwise (the script sizes him), smoothly scaled. Everything
+            in the balloon is drawn on a 2px grid. */
+         #clippy{position:fixed;left:0;top:0;z-index:23;display:none;visibility:hidden;
+         font:16px/1.25 "Pixelify Sans",monospace;font-weight:400;color:#000;text-shadow:none;
+         -webkit-font-smoothing:none}
+         html:not(.bleed) #clippy,html.tablet #clippy{display:block}
+         #clippy .agent{display:block;padding:0;margin:0;border:0;background:none;
+         cursor:pointer;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
+         #clippy .agent{transform-origin:50% 100%;transition:transform .15s}
+         #clippy .agent.ready{transform:scale(1.07)}   /* the glass, over him: "drop it here", like the hand */
+         #clippy .sprite{display:block;width:100%;height:100%;
+         background:url("images/clippy.png") 0 0 no-repeat}
+         #clippy .balloon{position:absolute;left:calc(100% + 12px);top:-8px;width:248px;padding:10px 12px 12px;
+         background:#ffffcf;box-shadow:-2px 0 #000,2px 0 #000,0 -2px #000,0 2px #000,6px 6px rgba(0,0,0,.45)}
+         #clippy .balloon[hidden]{display:none}
+         #clippy .balloon::before{content:"";position:absolute;left:-16px;top:26px;width:16px;height:14px;
+         background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 7' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h8v1H0zM1 1h1v1H1zM2 2h1v1H2zM3 3h1v1H3zM4 4h1v1H4zM5 5h1v1H5zM6 6h2v1H6z'/%3E%3Cpath fill='%23ffffcf' d='M2 1h6v1H2zM3 2h5v1H3zM4 3h4v1H4zM5 4h3v1H5zM6 5h2v1H6z'/%3E%3C/svg%3E") 0 0/100% 100%;
+         image-rendering:pixelated}
+         #clippy .say{margin:0 0 8px;-webkit-user-select:text;user-select:text}
+         #clippy ul{list-style:none;margin:0 0 10px;padding:0}
+         #clippy .q{display:block;position:relative;width:100%;padding:3px 0 3px 18px;margin:0;border:0;background:none;
+         font:inherit;color:inherit;text-align:left;cursor:pointer}
+         #clippy .q::before{content:"";position:absolute;left:0;top:7px;width:10px;height:10px;image-rendering:pixelated;
+         background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 5 5' shape-rendering='crispEdges'%3E%3Cpath fill='%23173fb7' d='M1 0h3v1h1v3H4v1H1V4H0V1h1z'/%3E%3Cpath fill='%2390b0ff' d='M1 1h1v1H1z'/%3E%3C/svg%3E") 0 0/100% 100%}
+         #clippy .q:hover,#clippy .q:focus-visible{color:#173fb7;text-decoration:underline;text-decoration-thickness:2px;outline:none}
+         #clippy form{display:flex;gap:6px;margin:0}
+         #clippy input{flex:1 1 auto;min-width:0;height:28px;box-sizing:border-box;padding:2px 6px;margin:0;border:0;border-radius:0;
+         background:#fff;font:inherit;font-size:16px;color:#000;-webkit-user-select:text;user-select:text;outline:none;
+         box-shadow:inset 2px 2px #7b7b7b,inset -2px -2px #fff,inset 4px 4px #000,inset -4px -4px #dcdcdc;
+         -webkit-appearance:none;appearance:none}
+         #clippy input::placeholder{color:#7b7b7b}
+         #clippy form button{flex:0 0 auto;height:28px;padding:0 10px;margin:0;border:0;border-radius:0;background:#c3c3c3;
+         font:inherit;color:#000;cursor:pointer;-webkit-appearance:none;appearance:none;
+         box-shadow:inset -2px -2px #000,inset 2px 2px #fff,inset -4px -4px #7b7b7b,inset 4px 4px #dcdcdc}
+         #clippy form button:active{box-shadow:inset 2px 2px #000,inset -2px -2px #fff,inset 4px 4px #7b7b7b,inset -4px -4px #dcdcdc;
+         padding-top:2px}
+         #clippy .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
       </style>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans&display=swap">
    </head>
    <body>
       <div class="bar">
@@ -179,6 +223,18 @@
          <button class="crayon" data-color="#2E3A8C" style="--c:#2E3A8C" aria-label="Blue crayon" aria-pressed="false" data-cursor="images/crayon-blue-cursor.png" data-hotspot="1 38" data-cursor-len="54"><img src="images/crayon-blue.png" alt=""></button>
          <button class="crayon" data-color="#EDBE1F" style="--c:#EDBE1F" aria-label="Yellow crayon" aria-pressed="false" data-cursor="images/crayon-yellow-cursor.png" data-hotspot="1 38" data-cursor-len="54"><img src="images/crayon-yellow.png" alt=""></button>
          <button class="crayon tall" data-color="#4a4a4a" style="--c:#4a4a4a" aria-label="Pencil (right-click erases)" aria-pressed="false" data-cursor="images/pencil-cursor.png" data-hotspot="1 38" data-cursor-len="56" data-eraser-cursor="images/pencil-eraser-cursor.png" data-eraser-hotspot="1 37"><img src="images/pencil.png" alt=""></button>
+      </div>
+      <div id="clippy">
+         <button class="agent" type="button" aria-label="Clippy, your magazine assistant" aria-expanded="false" aria-controls="clippyBalloon"><span class="sprite"></span></button>
+         <div class="balloon" id="clippyBalloon" role="dialog" aria-label="Clippy" hidden>
+            <p class="say" aria-hidden="true"></p>
+            <p class="sr" aria-live="polite"></p>
+            <ul></ul>
+            <form autocomplete="off">
+               <input type="text" maxlength="120" placeholder="Type your question here" aria-label="Ask Clippy a question" enterkeyhint="send">
+               <button type="submit">Ask</button>
+            </form>
+         </div>
       </div>
       <div id="loupe">
          <canvas></canvas>
@@ -501,6 +557,7 @@
          };
          document.addEventListener('keydown', function (e) {
             if (document.body.classList.contains('writing')) return;   // no page turning with a crayon
+            if (e.target.closest && e.target.closest('input')) return;   // typing to Clippy
             var i = flip.getCurrentPageIndex();
             if (e.key === 'ArrowLeft' && i > 1) flip.flipPrev();
             if (e.key === 'ArrowRight' && i < n) flip.flipNext();
@@ -628,6 +685,7 @@
          // Phone: it stays in the box, tilted, as an on/off toggle.
          var desktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
          var glass = desktop || root.classList.contains('tablet');   // the magnifying glass: computers and tablets
+         var clippy = glass ? startClippy(desktop) : null;           // ...and Clippy, above it
          var lastX = -1, lastY = -1;
          document.addEventListener('pointermove', function (e) { lastX = e.clientX; lastY = e.clientY; }, { passive: true });
          buttons.forEach(function (b) { if (b.dataset.cursor) new Image().src = b.dataset.cursor; });
@@ -1202,6 +1260,13 @@
             var y = spot ? spot.y * window.innerHeight : fr.top + fr.height / 2;
             return { x: Math.max(0, Math.min(window.innerWidth, x)), y: Math.max(0, Math.min(window.innerHeight, y)), s: 1, a: OUT_A };
          }
+         // Clippy can end up with it (see letGo): small, at his side, until he gives it back.
+         var mine = false;
+         function clippyPose() {
+            var p = clippy.holdPoint();
+            return { x: p.x, y: p.y, s: heldPose().s * 1.1, a: 105 };   // handle down
+         }
+         if (clippy) clippy.onGiveBack = function () { mine = false; loupe.classList.remove('clippys'); goHome(); };
          function goHome() {   // into the hand, which closes on it
             animateTo(heldPose(), 260, function () { lens.held = true; showHand(); save(); });
          }
@@ -1214,9 +1279,11 @@
             requestAnimationFrame(tweenLoop);
             if (!tween) {
                // Being dragged: full size, but shrinking to hand size and turning to the holding
-               // angle over the hand, so you can see it'll go back in. The pointer keeps its spot.
+               // angle over the hand, so you can see it'll go back in (and the same over Clippy,
+               // to the way he'd hold it). The pointer keeps its spot.
                if (drag) {
-                  var hp = heldPose(), ts = drag.over ? hp.s * 1.25 : 1, ta = drag.over ? HELD_A : OUT_A;
+                  var hp = drag.over ? heldPose() : drag.toClippy ? clippyPose() : null;
+                  var ts = hp ? hp.s * 1.25 : 1, ta = hp ? hp.a : OUT_A;
                   lens.s += (ts - lens.s) * 0.25;
                   lens.a += (ta - lens.a) * 0.25;
                   placeLens(ptr.x + drag.nx * lens.R * lens.s, ptr.y + drag.ny * lens.R * lens.s);
@@ -1230,11 +1297,19 @@
             applyLens();
             if (t >= 1) { var done = tween.done; tween = null; if (done) done(); }
          })();
+         // Clippy: in the middle of the gap between the Back link and the top of the glass in the hand.
+         function placeClippy() {
+            if (!clippy) return;
+            var hp = heldPose(), unit = HANDLE_PX / HANDLE_U;
+            clippy.place(document.querySelector('.bar').getBoundingClientRect().bottom, hp.y - 110 * unit);
+         }
          function refit() {
             if (!lens.out) return;
             sizeLens();
             placeHand();
-            if (lens.held && !tween) { var p = heldPose(); lens.x = p.x; lens.y = p.y; lens.s = p.s; lens.a = p.a; applyLens(); }
+            placeClippy();
+            if (mine && !tween) { var cp = clippyPose(); lens.x = cp.x; lens.y = cp.y; lens.s = cp.s; lens.a = cp.a; applyLens(); }
+            else if (lens.held && !tween) { var p = heldPose(); lens.x = p.x; lens.y = p.y; lens.s = p.s; lens.a = p.a; applyLens(); }
             else if (!lens.held) placeLens(lens.x, lens.y);
          }
          window.addEventListener('resize', refit);
@@ -1387,6 +1462,7 @@
             handOpen.style.display = handFist.style.display = 'block';
             sizeLens();
             placeHand();
+            placeClippy();
             var at = null;
             try { at = JSON.parse(localStorage.getItem('uncle-glass')); } catch (e) {}
             if (at && at.x >= 0 && at.x <= 1 && at.y >= 0 && at.y <= 1) spot = { x: at.x, y: at.y };
@@ -1405,6 +1481,12 @@
          function isGlass(el) { return el && el.nodeType === 1 && (loupe.contains(el) || el === handFist || el === handOpen); }
          function grab(e) {
             if (!lens.out || drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+            if (mine) {   // Clippy has it: no
+               e.preventDefault();
+               e.stopPropagation();
+               clippy.guard();
+               return;
+            }
             e.preventDefault();
             e.stopPropagation();
             e.target.setPointerCapture(e.pointerId);
@@ -1432,6 +1514,7 @@
          handOpen.addEventListener('animationend', function () { handOpen.classList.remove('nope'); });
          handOpen.addEventListener('click', function () {
             if (!lens.out || lens.held || drag) return;
+            if (mine) return clippy.guard();   // Clippy has it, and he's not giving it up for a click
             if (document.body.classList.contains('writing')) {   // holding a crayon out to it: no thanks
                handOpen.classList.remove('nope');
                void handOpen.offsetWidth;   // so a second click wags it again
@@ -1448,16 +1531,22 @@
             var c = drag.click;
             if (Math.abs(ptr.x - c.sx) + Math.abs(ptr.y - c.sy) > 6) c.moved = true;
             drag.over = overHand(ptr.x, ptr.y);
+            drag.toClippy = !drag.over && !!clippy && clippy.over(ptr.x, ptr.y);
             handOpen.classList.toggle('ready', drag.over);
+            if (clippy) clippy.ready(drag.toClippy);
          });
          function letGo(e) {
             if (!drag || e.pointerId !== drag.id) return;
-            var over = drag.over, c = drag.click;
+            var drag0 = drag, over = drag.over, c = drag.click;
             var clicked = e.type === 'pointerup' && !c.moved && performance.now() - c.t0 < 300;
             drag = null;
             loupe.classList.remove('dragging');
             handOpen.classList.remove('ready');
-            if (clicked && c.wasHeld) {   // click on the hand: out to where it was last time
+            if (clippy) clippy.ready(false);
+            if (drag0.toClippy && !clicked) {   // offered to Clippy: back to the hand, or he keeps it
+               if (clippy.offer()) { mine = true; loupe.classList.add('clippys'); animateTo(clippyPose, 300); }
+               else goHome();
+            } else if (clicked && c.wasHeld) {   // click on the hand: out to where it was last time
                animateTo(spotPose(), 320, save);
             } else if (clicked || over) {
                goHome();
@@ -1478,6 +1567,239 @@
                if (drag || (starts && isGlass(e.target))) e.stopPropagation();
             }, true);
          });
+      }
+
+      // ---------------------------------------------------------------- Clippy
+      // Click him and he asks what you'd like to do: three questions he knows, and a box for
+      // anything else, which he doesn't (unless it's about one of those three). The animation
+      // player is clippy.js's Animator cut down: each frame shows for its time, then moves on,
+      // or jumps (branching, at random) to replay a bit; settle() takes the exit branches so a
+      // looping animation winds down to rest.
+      function startClippy(desktop) {
+         // The questions on his list, what he says, and what he does while saying it. A typed
+         // question gets the same answer if it matches.
+         var QA = [
+            { q: 'What is Uncle Magazine?', anim: 'Explain',
+              match: /uncle|magazine|what('?s| is) (this|it)|who (made|makes|wrote|did)/,
+              a: 'It’s a magazine. By uncles, for uncles! You’re reading it right now.' },
+            { q: 'How do I draw on the pages?', anim: 'GestureLeft',
+              match: /^(?!.*(eras|rub|undo|remove|delete|get rid|clean|wipe)).*(draw|crayon|pencil|scribbl|doodle|colou?r|write on)/,
+              a: desktop ? 'Grab a crayon or the pencil over on the right and scribble away! Right-click with the pencil to rub one out. Click it again to put it back.'
+                         : 'Tap a crayon or the pencil over on the right and scribble away! Tap it again to put it back.' },
+            { q: 'How do I erase my crayon marks?', anim: 'IdleEyeBrowRaise',
+              match: /eras|rub|undo|remove|delete|get rid|clean|wipe/,
+              a: 'Actions have consequences, pal.' }
+         ];
+         // Anything else.
+         var DUNNO = [
+            { a: 'I don’t know! I’m just a clipboard or a paperclip or something.', anim: 'IdleHeadScratch' },
+            { a: 'Can you go ask your mom or something?', anim: 'GestureRight' },
+            { a: 'Gee kid, I don’t know. Hit the road!', anim: 'GetAttention' }
+         ];
+         // Offered the magnifying glass (dropped on him), he says no twice; the third time he
+         // keeps it, until you ask for it back.
+         var OFFERS = [
+            { a: 'No thanks, I\u2019m good.', anim: 'IdleEyeBrowRaise' },
+            { a: 'I said no! Quit it.', anim: 'GetAttention' }
+         ];
+         var TAKE = { a: 'Alright, stop annoying me. This is mine now.', anim: 'IdleFingerTap' };
+         var HANDS_OFF = { a: 'Hands off! It\u2019s mine now. Ask nicely.', anim: 'IdleEyeBrowRaise' };
+         var GIVE = { q: 'Can I have the magnifying glass back?', anim: 'Explain',
+                      match: /glass|magnif|back|give|return|mine|please/,
+                      a: 'Fine, take it. Sheesh.' };
+         var IDLE = ['IdleEyeBrowRaise', 'IdleHeadScratch', 'IdleFingerTap', 'IdleSideToSide', 'Thinking',
+                     'LookRight', 'LookUpRight', 'LookDownRight'];
+         var K = 0;   // the frames are shown at 1x or 1.5x (see place)
+         var FW = 124, FH = 93;   // frame size (tools/make_clippy.py), known before the data loads
+
+         var box = document.getElementById('clippy'), agent = box.querySelector('.agent'), sprite = box.querySelector('.sprite');
+         var balloon = box.querySelector('.balloon'), say = box.querySelector('.say'), live = box.querySelector('.sr');
+         var form = box.querySelector('form'), input = form.querySelector('input'), list = box.querySelector('ul');
+         var data = null, anim = null, rest = 0, cur = -1, lastDunno = -1, typer = 0;
+         var offers = 0, has = false, api;
+
+         QA.forEach(function (qa) {
+            var li = document.createElement('li'), b = document.createElement('button');
+            b.type = 'button'; b.className = 'q'; b.textContent = qa.q;
+            b.addEventListener('click', function () { answer(qa); });
+            li.appendChild(b); list.appendChild(li);
+         });
+         var giveLi = document.createElement('li'), giveBtn = document.createElement('button');   // only while he has it
+         giveBtn.type = 'button'; giveBtn.className = 'q'; giveBtn.textContent = GIVE.q;
+         giveBtn.addEventListener('click', giveBack);
+         giveLi.hidden = true;
+         giveLi.appendChild(giveBtn); list.appendChild(giveLi);
+
+         // ---- animation
+         function draw(i) {
+            cur = i;
+            sprite.style.visibility = i < 0 || !K ? 'hidden' : '';
+            if (i < 0 || !K) return;
+            var w = data.pitch[0] * K, h = data.pitch[1] * K;
+            sprite.style.backgroundSize = sheet.naturalWidth * K + 'px auto';
+            sprite.style.backgroundPosition = -(i % data.cols) * w + 'px ' + -Math.floor(i / data.cols) * h + 'px';
+         }
+         function play(name, done) {
+            if (anim) clearTimeout(anim.timer);
+            anim = { name: name, frames: data.animations[name], i: -1, exiting: false, done: done };
+            step();
+         }
+         function next(a) {   // frame: [ms, sheet index, exit branch, [[to, weight], ...]]
+            if (a.i < 0) return 0;
+            var f = a.frames[a.i];
+            if (a.exiting && f[2] >= 0) return f[2];
+            var r = Math.random() * 100;
+            for (var k = 0; k < f[3].length; k++) {
+               if (r <= f[3][k][1]) return f[3][k][0];
+               r -= f[3][k][1];
+            }
+            return a.i + 1;
+         }
+         function step() {
+            var a = anim, i = next(a);
+            if (i >= a.frames.length) {
+               anim = null;
+               draw(rest);
+               if (a.done) a.done();
+               return;
+            }
+            a.i = i;
+            draw(a.frames[i][1]);
+            a.timer = setTimeout(step, a.frames[i][0]);
+         }
+         function settle() { if (anim) anim.exiting = true; }
+         // Now and then (every 9-20s), a fidget, unless he's busy or you're typing to him.
+         function fidget() {
+            setTimeout(fidget, 9000 + Math.random() * 11000);
+            if (anim || document.hidden || document.activeElement === input) return;
+            play(IDLE[Math.floor(Math.random() * IDLE.length)]);
+         }
+
+         // ---- talking
+         function speak(text) {   // typed out a letter at a time, like he means it
+            clearInterval(typer);
+            live.textContent = text;
+            var n = 0;
+            say.textContent = '';
+            typer = setInterval(function () {
+               say.textContent = text.slice(0, ++n);
+               if (n >= text.length) clearInterval(typer);
+            }, 22);
+         }
+         function answer(qa) {
+            speak(qa.a);
+            play(qa.anim);
+         }
+         function ask(text) {
+            var t = text.toLowerCase().replace(/’/g, '\'');
+            if (has && GIVE.match.test(t)) return giveBack();
+            for (var k = 0; k < QA.length; k++) if (QA[k].match.test(t)) return answer(QA[k]);
+            do k = Math.floor(Math.random() * DUNNO.length); while (k === lastDunno);   // never the same twice running
+            lastDunno = k;
+            answer(DUNNO[k]);
+         }
+         function isOpen() { return !balloon.hidden; }
+         function show() {
+            balloon.hidden = false;
+            agent.setAttribute('aria-expanded', 'true');
+         }
+         function open() {
+            show();
+            speak('What would you like to know?');
+            play('Explain');
+         }
+         function tell(line) {   // say something, opening the balloon if it's shut
+            show();
+            answer(line);
+         }
+         function giveBack() {
+            if (!has) return;
+            has = false;
+            giveLi.hidden = true;
+            tell(GIVE);
+            if (api.onGiveBack) api.onGiveBack();
+         }
+         function close() {
+            balloon.hidden = true;
+            agent.setAttribute('aria-expanded', 'false');
+            clearInterval(typer);
+            if (document.activeElement === input) input.blur();
+            settle();
+         }
+         agent.addEventListener('click', function () { if (isOpen()) close(); else open(); });
+         form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            ask(text);
+         });
+         // Typing: he puts his headphones on to listen.
+         input.addEventListener('focus', function () { if (!anim) play('Hearing_1'); });
+         input.addEventListener('blur', function () { if (anim && anim.name === 'Hearing_1') settle(); });
+         input.addEventListener('input', function () { if (!anim) play('Hearing_1'); });
+         // A click or tap anywhere else, or Escape, puts the balloon away.
+         document.addEventListener('pointerdown', function (e) { if (isOpen() && !box.contains(e.target)) close(); }, true);
+         document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen()) close(); });
+         // Keep page-flip from seeing presses and drags in the balloon (corner peeks, page turns).
+         ['mousedown', 'mousemove', 'mouseup', 'touchstart', 'touchmove', 'touchend'].forEach(function (t) {
+            window.addEventListener(t, function (e) { if (box.contains(e.target)) e.stopPropagation(); }, true);
+         });
+
+         // ---- loading: the frames and the animations, then he pops in and says hello
+         var sheet = new Image();
+         Promise.all([
+            fetch('images/clippy.json').then(function (r) { return r.json(); }),
+            new Promise(function (ok, bad) { sheet.onload = ok; sheet.onerror = bad; sheet.src = 'images/clippy.png'; })
+         ]).then(function (got) {
+            data = got[0];
+            rest = data.animations.RestPose[0][1];
+            draw(-1);
+            box.style.visibility = 'visible';
+            play('Show', function () { play('Greeting'); });
+            setTimeout(fidget, 9000 + Math.random() * 11000);
+         }, function () {});   // no Clippy, then
+
+         api = {
+            onGiveBack: null,   // set by the glass: he's handing it back
+            // Is (x, y) on him? (Something's being dropped on him.)
+            over: function (x, y) {
+               if (box.style.visibility !== 'visible') return false;
+               var r = agent.getBoundingClientRect(), m = 10;
+               return x > r.left - m && x < r.right + m && y > r.top - m && y < r.bottom + m;
+            },
+            // The glass, dropped on him: true if he takes it.
+            offer: function () {
+               if (offers < OFFERS.length) { tell(OFFERS[offers++]); return false; }
+               offers = 0;
+               has = true;
+               giveLi.hidden = false;
+               tell(TAKE);
+               return true;
+            },
+            guard: function () { tell(HANDS_OFF); },   // someone's after his glass
+            ready: function (on) { agent.classList.toggle('ready', on); },   // something's coming his way
+            // Where he keeps it: in front of him, low on the left (clear of his balloon).
+            holdPoint: function () {
+               var r = agent.getBoundingClientRect();
+               return { x: r.left + r.width * 0.3, y: r.top + r.height * 0.8 };
+            },
+            // Centre him (and his paper) in the gap from top to bottom, and over the hand and
+            // glass: 1.5x on computers if he fits in the gap, else 1x.
+            place: function (top, bottom) {
+               var k = desktop && bottom - top >= 1.5 * FH + 8 ? 1.5 : 1;
+               if (k !== K) {
+                  K = k;
+                  agent.style.width = FW * K + 'px';
+                  agent.style.height = Math.round(FH * K) + 'px';
+                  if (data) draw(cur);
+               }
+               var x = Math.round((desktop ? 90 : 80) - FW * K / 2);
+               var y = Math.max(top + 4, Math.round((top + bottom - FH * K) / 2));
+               box.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+            }
+         };
+         return api;
       }
       </script>
    </body>
