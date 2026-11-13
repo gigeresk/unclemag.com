@@ -23,11 +23,19 @@
             load (see the script below). */
          html.bleed{padding-top:100px;padding-bottom:160px;background-position:center 100px}
 
-         /* Masthead: the black logo turned white, with a black outline and a hard drop shadow. */
-         header h1{margin:0;line-height:0}
-         header img{width:min(520px,80vw);height:auto;transform:rotate(-3deg);
+         /* Masthead: the black logo turned white, with a black outline and a hard drop shadow. The filter
+            is on the h1 and the rotation on the img, so the shadow stays down-right while the logo spins. */
+         header h1{display:inline-block;margin:0;line-height:0;cursor:pointer;user-select:none;-webkit-user-select:none;
+         touch-action:manipulation;-webkit-tap-highlight-color:transparent;
          filter:invert(1) drop-shadow(3px 0 0 #000) drop-shadow(-3px 0 0 #000) drop-shadow(0 3px 0 #000)
          drop-shadow(0 -3px 0 #000) drop-shadow(10px 10px 0 rgba(0,0,0,.75))}
+         header img{display:block;width:min(520px,80vw);height:auto;transform:rotate(-3deg);pointer-events:none}
+         /* Hover: an itchy little wiggle, as if it wants to go. (Not while it's spinning; see the script.) */
+         @media (hover:hover) and (prefers-reduced-motion:no-preference){
+            header h1:not(.spinning):hover img{animation:itch 1.3s ease-in-out infinite}
+         }
+         @keyframes itch{0%,36%,100%{rotate:0deg}6%{rotate:3deg}12%{rotate:-2.5deg}18%{rotate:2deg}
+         24%{rotate:-1.2deg}30%{rotate:.6deg}}
 
          /* Covers, strewn a little crooked like magazines on a coffee table; they straighten up on hover. */
          .issues{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);
@@ -70,8 +78,49 @@
    </head>
    <body>
       <header>
-         <h1><img src="images/uncle-logo-black.png" alt="Uncle Magazine"></h1>
+         <h1><img src="images/uncle-logo-black.png" alt="Uncle Magazine" draggable="false"></h1>
       </header>
+      <script>
+         // Click the logo to give it a shove. It's a weighted wheel: each click adds speed, friction bleeds
+         // it off, and a pendulum pull swings it back upright. One click makes it lurch and rock back;
+         // click quickly and it gets over the top and keeps spinning, coasting down when you stop.
+         (function () {
+            var logo = document.querySelector('header h1'), img = logo.querySelector('img');
+            var PULL = 600,    // deg/s² pulling it back upright (pendulum)
+                DRAG = 0.9,    // per second, friction proportional to speed...
+                SETTLE = 2.4,  // ...and more once it's slow and near upright, so it rocks a few times and
+                               // stops (not near the top, or it hangs there upside down)
+                SHOVE = 300,   // deg/s added per click
+                TOP = 2000;    // deg/s speed limit
+            var angle = 0, speed = 0, last = 0, running = false;
+            function frame(t) {
+               var dt = Math.min((t - last) / 1000, 0.05) / 4;
+               last = t;
+               for (var i = 0; i < 4; i++) {
+                  speed += (-PULL * Math.sin(angle * Math.PI / 180) - (Math.abs(speed) < 200 && Math.abs(angle) < 90 ? SETTLE : DRAG) * speed) * dt;
+                  angle += speed * dt;
+               }
+               angle = ((angle + 180) % 360 + 360) % 360 - 180;
+               if (Math.abs(speed) < 3 && Math.abs(angle) < 0.5) {
+                  angle = speed = 0;
+                  running = false;
+                  logo.classList.remove('spinning');
+               }
+               img.style.transform = 'rotate(' + (angle - 3) + 'deg)';
+               if (running) requestAnimationFrame(frame);
+            }
+            logo.addEventListener('pointerdown', function (e) {
+               if (e.button) return;
+               speed = Math.min(speed + SHOVE, TOP);
+               logo.classList.add('spinning');
+               if (!running) {
+                  running = true;
+                  last = performance.now();
+                  requestAnimationFrame(frame);
+               }
+            });
+         })();
+      </script>
       <ul class="issues">
          <li>
             <a href="reader.html?issue=2025"><img src="images/Uncle_Magazine_2025cover.jpg" alt="Uncle Magazine, December 14th 2025 19:42 EST cover"></a>

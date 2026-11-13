@@ -152,7 +152,13 @@
          #back .arrow{display:block;width:38px;height:32px;image-rendering:pixelated;
          background:url("images/back-arrow.png") 0 0/100% 100% no-repeat}
          #back:active .arrow{transform:translateY(1px)}
-         html:not(.bleed) #back .arrow,html.tablet #back .arrow{width:57px;height:48px}
+         html:not(.bleed) #back .arrow,html.tablet #back .arrow{width:57px;height:48px;--px:3px}
+         /* Hover: it scoots left in whole art pixels, hop-hop, pause, as if to say "this way". */
+         #back .arrow{--px:2px}
+         #back:hover .arrow,#back:focus-visible .arrow{animation:scoot 1.1s step-end infinite}
+         @keyframes scoot{0%,32%,64%,100%{translate:0}8%,24%,40%,56%{translate:calc(var(--px)*-1) 0}
+         16%,48%{translate:calc(var(--px)*-2) 0}}
+         @media (prefers-reduced-motion:reduce){#back:hover .arrow,#back:focus-visible .arrow{animation:none;translate:calc(var(--px)*-1) 0}}
          html:not(.bleed) #back,html.tablet #back{margin-left:calc(90px - 28.5px - max(16px,env(safe-area-inset-left)))}
          #print{display:inline-flex;align-items:center;gap:6px;margin-right:auto;text-decoration:none;
          -webkit-tap-highlight-color:transparent}
